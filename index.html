@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimal Stopping Farm Simulation</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Optimal Farm</h1>
+            <p>An exploration of Optimal Stopping Theory using Minecraft-style crops.</p>
+        </header>
+
+        <main class="dashboard">
+
+            <section class="farm-section enemy-section" id="enemy-section" style="display: none;">
+                <h2 class="farm-title" id="enemy-farm-title">Farm 1 (Left)</h2>
+                <div class="farm-content" style="display: flex; gap: 20px; align-items: flex-start;">
+                    <div id="enemy-farm-grid" class="farm-grid"></div>
+                    <div class="stat-section comp-inline-stats" style="margin-bottom: 0; min-width: 150px;">
+                        <div class="stat-box"
+                            style="flex-direction: column; align-items: center; justify-content: center; margin-bottom: 10px;">
+                            <span class="stat-label" style="margin-bottom: 5px;">Total Yield</span>
+                            <span id="stat-yield-enemy" class="stat-value"
+                                style="font-size: 1.4rem; color: white;">0</span>
+                        </div>
+                        <div class="stat-box highlight"
+                            style="flex-direction: column; align-items: center; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 10px;">
+                            <span class="stat-label"
+                                style="font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 5px;">Yield
+                                / Time</span>
+                            <span id="stat-yield-time-enemy" class="stat-value">0.0000</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <section class="farm-section player-section">
+                <h2 class="farm-title" id="player-farm-title" style="display: none;">Farm 2 (Right)</h2>
+                <div class="farm-content" style="display: flex; gap: 20px; align-items: flex-start;">
+                    <div style="display: flex; flex-direction: column;">
+                        <div id="farm-grid" class="farm-grid"></div>
+                        <button id="btn-harvest" class="btn harvest-btn"
+                            style="display: none; margin-top: 20px; width: 100%; max-width: 450px; font-size: 2rem; padding: 15px;">Harvest
+                            Now</button>
+                    </div>
+                    <div class="stat-section comp-inline-stats" id="player-inline-stats"
+                        style="display: none; margin-bottom: 0; min-width: 150px;">
+                        <div class="stat-box"
+                            style="flex-direction: column; align-items: center; justify-content: center; margin-bottom: 10px;">
+                            <span class="stat-label" style="margin-bottom: 5px;">Total Yield</span>
+                            <span id="stat-yield-player" class="stat-value"
+                                style="font-size: 1.4rem; color: white;">0</span>
+                        </div>
+                        <div class="stat-box highlight"
+                            style="flex-direction: column; align-items: center; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 10px;">
+                            <span class="stat-label"
+                                style="font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 5px;">Yield
+                                / Time</span>
+                            <span id="stat-yield-time-player" class="stat-value">0.0000</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <section class="control-section">
+
+                <div class="panel stats-panel" id="standard-stats">
+                    <h2>Statistics</h2>
+                    <div class="stat-box">
+                        <span class="stat-label">Total Yield:</span>
+                        <span id="stat-yield" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Total Time (Ticks):</span>
+                        <span id="stat-ticks" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-box highlight">
+                        <span class="stat-label">Yield / Time:</span>
+                        <span id="stat-yield-time" class="stat-value">0.0000</span>
+                    </div>
+                </div>
+
+
+                <div class="panel controls-panel">
+                    <h2>Simulation Controls</h2>
+
+                    <div class="control-group">
+                        <label for="strategy-select" id="right-strategy-label">Farm Strategy:</label>
+                        <select id="strategy-select">
+                            <option value="manual">Manual (Player)</option>
+                            <option value="threshold">Threshold</option>
+                            <option value="naive_heuristic">Crude Expected Value</option>
+                            <option value="true_expected_value">Markov Expected Value</option>
+                            <option value="diminishing_returns">Diminishing Returns</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group" id="player-threshold-group" style="display: none;">
+                        <label for="player-threshold">Harvest at: <span id="player-threshold-label">100</span>%</label>
+                        <input type="range" id="player-threshold" min="1" max="100" value="100">
+                    </div>
+
+                    <div class="control-group" id="compete-group">
+                        <label>
+                            <input type="checkbox" id="compete-toggle"> Enable Dual Farm Display
+                        </label>
+                        <label id="left-strategy-label" for="enemy-strategy"
+                            style="display: none; margin-top: 15px;">Left Farm Strategy:</label>
+                        <select id="enemy-strategy" style="display: none;">
+                            <option value="threshold">Threshold</option>
+                            <option value="naive_heuristic">Crude Expected Value</option>
+                            <option value="true_expected_value">Markov Expected Value</option>
+                            <option value="diminishing_returns">Diminishing Returns</option>
+                        </select>
+                        <div id="enemy-threshold-group" style="display: none; margin-top: 10px;">
+                            <label for="enemy-threshold">Harvest at: <span
+                                    id="enemy-threshold-label">100</span>%</label>
+                            <input type="range" id="enemy-threshold" min="1" max="100" value="100">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="speed-slider">Tick Speed: <span id="speed-label">Medium</span></label>
+                        <input type="range" id="speed-slider" min="1" max="100" value="50">
+                    </div>
+
+                    <div class="button-group">
+                        <button id="btn-play-pause" class="btn primary-btn">Play</button>
+                        <button id="btn-step" class="btn secondary-btn">Step</button>
+                        <button id="btn-reset" class="btn danger-btn">Reset</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
