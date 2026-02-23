@@ -122,11 +122,11 @@ header p {
     width: clamp(28px, 5vw, 40px);
     height: clamp(28px, 5vw, 40px);
     background-color: var(--grid-bg);
-    background-size: 100% 100%;
+    background-size: 100% 100%, 100% 100%;
     background-position: center;
     background-repeat: no-repeat;
     image-rendering: pixelated;
-    contain: strict;
+    will-change: transform;
 }
 
 .crop-cell.stage-0 {

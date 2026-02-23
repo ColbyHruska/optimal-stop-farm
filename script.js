@@ -163,10 +163,11 @@
     var STAGE_CLASSES = ['stage-0', 'stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5', 'stage-6', 'stage-7', 'water'];
 
     function setCellClass(cell, cls) {
-        for (var i = 0; i < STAGE_CLASSES.length; i++) {
-            cell.classList.remove(STAGE_CLASSES[i]);
-        }
+        if (cell.dataset.stage === cls) return;
+        var old = cell.dataset.stage;
+        if (old) cell.classList.remove(old);
         cell.classList.add(cls);
+        cell.dataset.stage = cls;
     }
 
     function updateCellVisual(r, c, isEnemy) {
@@ -269,6 +270,8 @@
     var chartCanvas = null;
     var chartCtx = null;
     var renderScheduled = false;
+    var chartDisplayWidth = 0;
+    var chartDisplayHeight = 0;
 
     function initChart(canvasEl) {
         chartCanvas = canvasEl;
@@ -279,6 +282,8 @@
     function resizeCanvas() {
         if (!chartCanvas) return;
         var rect = chartCanvas.getBoundingClientRect();
+        chartDisplayWidth = rect.width;
+        chartDisplayHeight = rect.height;
         var dpr = window.devicePixelRatio || 1;
         chartCanvas.width = rect.width * dpr;
         chartCanvas.height = rect.height * dpr;
@@ -307,8 +312,8 @@
 
     function renderChart(playerData, enemyData, showEnemy) {
         if (!chartCtx || !chartCanvas) return;
-        var displayWidth = chartCanvas.getBoundingClientRect().width;
-        var displayHeight = chartCanvas.getBoundingClientRect().height;
+        var displayWidth = chartDisplayWidth;
+        var displayHeight = chartDisplayHeight;
         chartCtx.clearRect(0, 0, displayWidth, displayHeight);
 
         var chartWidth = displayWidth - CHART_PADDING.left - CHART_PADDING.right;
