@@ -836,10 +836,18 @@
         updateUI();
     }
 
+    function computeMaxTickSpeed() {
+        var n2 = GRID_SIZE * GRID_SIZE;
+        var lnN2 = Math.log(n2);
+        var lnlnN2 = Math.log(lnN2);
+        return n2 * lnN2 + (MAX_AGE - 1) * n2 * lnlnN2;
+    }
+
     function setSimulationSpeed() {
-        var maxInterval = 500;
-        var minInterval = 10;
-        var interval = maxInterval - ((state.currentSpeed - 1) / 99) * (maxInterval - minInterval);
+        var pct = state.currentSpeed / 100;
+        var maxTPS = computeMaxTickSpeed();
+        var ticksPerSecond = Math.max(1, Math.round(pct * maxTPS));
+        var interval = Math.max(1, Math.round(1000 / ticksPerSecond));
         if (state.isPlaying) {
             clearInterval(state.simulationInterval);
             state.simulationInterval = setInterval(stepSimulation, interval);
@@ -875,9 +883,7 @@
 
         dom.speedSlider.addEventListener('input', function (e) {
             state.currentSpeed = parseInt(e.target.value);
-            if (state.currentSpeed < 30) dom.speedLabel.innerText = 'Slow';
-            else if (state.currentSpeed < 70) dom.speedLabel.innerText = 'Medium';
-            else dom.speedLabel.innerText = 'Fast';
+            dom.speedLabel.innerText = state.currentSpeed + '%';
             setSimulationSpeed();
         });
 
