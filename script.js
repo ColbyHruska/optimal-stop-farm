@@ -81,10 +81,11 @@
         farm.rng = createSeededRng(0);
         farm.history = [];
         farm.ticksSinceHarvest = 0;
+        farm.grid = [];
         for (var r = 0; r < GRID_SIZE; r++) {
-            for (var c = 0; c < GRID_SIZE; c++) {
-                farm.grid[r][c] = 0;
-            }
+            var row = [];
+            for (var c = 0; c < GRID_SIZE; c++) row.push(0);
+            farm.grid.push(row);
         }
     }
 
@@ -254,8 +255,15 @@
 
     function buildGridCells(farm) {
         var gridEl = farm.dom.gridEl;
-        gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
-        gridEl.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
+        gridEl.style.width = '';
+        gridEl.style.height = '';
+        var baseSize = parseInt(getComputedStyle(gridEl).width) || 360;
+        var cellPx = Math.floor(baseSize / GRID_SIZE);
+        var snappedSize = cellPx * GRID_SIZE;
+        gridEl.style.width = snappedSize + 'px';
+        gridEl.style.height = snappedSize + 'px';
+        gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', ' + cellPx + 'px)';
+        gridEl.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', ' + cellPx + 'px)';
         gridEl.innerHTML = '';
         farm.dom.cells = [];
         for (var r = 0; r < GRID_SIZE; r++) {
@@ -730,6 +738,9 @@
             btnRemoveFarm: document.getElementById('btn-remove-farm'),
             farmCountLabel: document.getElementById('farm-count-label'),
             chartCanvas: document.getElementById('chart-canvas'),
+            gridSizeInput: document.getElementById('grid-size-input'),
+            gridSizeLabel: document.getElementById('grid-size-label'),
+            gridSizeLabel2: document.getElementById('grid-size-label2'),
         };
 
         initChart(dom.chartCanvas);
@@ -770,10 +781,23 @@
         state.totalTicks = 0;
         for (var i = 0; i < state.farms.length; i++) {
             resetFarmData(state.farms[i]);
+            buildGridCells(state.farms[i]);
             resetFarmVisuals(state.farms[i]);
         }
         updateUI();
         renderChart();
+    }
+
+    function changeGridSize(newSize) {
+        newSize = Math.max(3, Math.min(15, newSize));
+        if (newSize === GRID_SIZE) return;
+        GRID_SIZE = newSize;
+        dom.gridSizeLabel.textContent = GRID_SIZE;
+        dom.gridSizeLabel2.textContent = GRID_SIZE;
+
+        STRATEGIES.dpCache = null;
+        STRATEGIES.lambdaStar = null;
+        resetSimulation();
     }
 
     function updateUI() {
@@ -855,6 +879,13 @@
             else if (state.currentSpeed < 70) dom.speedLabel.innerText = 'Medium';
             else dom.speedLabel.innerText = 'Fast';
             setSimulationSpeed();
+        });
+
+        dom.gridSizeInput.addEventListener('input', function (e) {
+            var val = parseInt(e.target.value);
+            if (val && val >= 3 && val <= 15) {
+                changeGridSize(val);
+            }
         });
 
         window.addEventListener('resize', function () {
