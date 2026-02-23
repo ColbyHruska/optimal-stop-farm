@@ -250,6 +250,26 @@ header p {
     width: 100%;
 }
 
+.farm-timed-group {
+    margin-top: 4px;
+}
+
+.farm-timed-group label {
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+.farm-timed-group .timed-input {
+    width: 100%;
+    padding: 6px;
+    font-family: inherit;
+    font-size: 1.1rem;
+    background-color: #111;
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
 /* ── Harvest Button ────────────────────────────────────────── */
 
 .harvest-btn {
@@ -324,7 +344,8 @@ header p {
 }
 
 select,
-input[type="range"] {
+input[type="range"],
+input[type="number"] {
     width: 100%;
     box-sizing: border-box;
     font-family: inherit;

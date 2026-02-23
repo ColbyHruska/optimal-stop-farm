@@ -32,6 +32,7 @@
 
     var STRATEGY_OPTIONS = [
         { value: 'threshold', label: 'Threshold' },
+        { value: 'timed', label: 'Periodic' },
         { value: 'naive_heuristic', label: 'Crude Expected Value' },
         { value: 'smart_heuristic', label: 'Smarter Expected Value' },
         { value: 'fixed_time_lookahead', label: 'Fixed-Time Lookahead' },
@@ -67,6 +68,8 @@
             history: [],
             strategy: id === 0 ? 'manual' : 'threshold',
             thresholdPct: 100,
+            timedInterval: 800,
+            ticksSinceHarvest: 0,
             dom: {},
         };
     }
@@ -77,6 +80,7 @@
         farm.isHarvesting = false;
         farm.rng = createSeededRng(0);
         farm.history = [];
+        farm.ticksSinceHarvest = 0;
         for (var r = 0; r < GRID_SIZE; r++) {
             for (var c = 0; c < GRID_SIZE; c++) {
                 farm.grid[r][c] = 0;
@@ -108,6 +112,10 @@
             var grownCount = countFullyGrown(grid);
             var requiredCrops = Math.ceil((totalCrops * config.thresholdPct) / 100);
             return grownCount >= requiredCrops;
+        },
+
+        timed: function (grid, config) {
+            return config.ticksSinceHarvest >= config.timedInterval;
         },
 
         naive_heuristic: function (grid) {
@@ -284,6 +292,7 @@
         farm.totalYield += grownCount;
         farm.isHarvesting = true;
         farm.harvestCount++;
+        farm.ticksSinceHarvest = 0;
         farm.rng = createSeededRng(farm.harvestCount);
 
         for (var r = 0; r < GRID_SIZE; r++) {
@@ -596,6 +605,23 @@
         threshGroup.appendChild(threshSlider);
 
         stratGroup.appendChild(threshGroup);
+
+        // Timed sub-group
+        var timedGroup = document.createElement('div');
+        timedGroup.className = 'farm-timed-group';
+        if (farm.strategy !== 'timed') timedGroup.classList.add('hidden');
+        var timedLabel = document.createElement('label');
+        timedLabel.textContent = 'Period (ticks):';
+        timedGroup.appendChild(timedLabel);
+
+        var timedInput = document.createElement('input');
+        timedInput.type = 'number';
+        timedInput.className = 'timed-input';
+        timedInput.min = '1';
+        timedInput.value = farm.timedInterval;
+        timedGroup.appendChild(timedInput);
+
+        stratGroup.appendChild(timedGroup);
         stats.appendChild(stratGroup);
 
         // Yield stat
@@ -650,6 +676,8 @@
             threshGroup: threshGroup,
             threshSlider: threshSlider,
             threshLabelSpan: threshLabelSpan,
+            timedGroup: timedGroup,
+            timedInput: timedInput,
             yieldVal: yieldVal,
             harvestVal: harvestVal,
             ytVal: ytVal,
@@ -659,7 +687,9 @@
         stratSelect.addEventListener('change', function () {
             farm.strategy = stratSelect.value;
             farm.thresholdPct = parseInt(threshSlider.value);
+            farm.timedInterval = parseInt(timedInput.value) || 800;
             threshGroup.classList.toggle('hidden', farm.strategy !== 'threshold');
+            timedGroup.classList.toggle('hidden', farm.strategy !== 'timed');
             // Only farm 0 can show harvest button
             if (farm.id === 0) {
                 harvestBtn.classList.toggle('hidden', farm.strategy !== 'manual');
@@ -670,6 +700,12 @@
         threshSlider.addEventListener('input', function () {
             farm.thresholdPct = parseInt(threshSlider.value);
             threshLabelSpan.textContent = threshSlider.value;
+        });
+
+        // Timed input handler
+        timedInput.addEventListener('input', function () {
+            var val = parseInt(timedInput.value);
+            if (val && val > 0) farm.timedInterval = val;
         });
 
         return card;
@@ -765,8 +801,9 @@
         state.totalTicks++;
         for (var i = 0; i < state.farms.length; i++) {
             var farm = state.farms[i];
+            farm.ticksSinceHarvest++;
             stepGrowth(farm);
-            if (!farm.isHarvesting && evaluateStrategy(farm.grid, farm.strategy, { thresholdPct: farm.thresholdPct })) {
+            if (!farm.isHarvesting && evaluateStrategy(farm.grid, farm.strategy, { thresholdPct: farm.thresholdPct, timedInterval: farm.timedInterval, ticksSinceHarvest: farm.ticksSinceHarvest })) {
                 doHarvest(farm);
             }
         }
