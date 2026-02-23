@@ -2,6 +2,26 @@
     'use strict';
 
     // ═══════════════════════════════════════════════════════════════
+    // SEEDED PRNG (mulberry32)
+    // ═══════════════════════════════════════════════════════════════
+
+    function mulberry32(seed) {
+        var t = (seed + 0x6D2B79F5) | 0;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+
+    function createSeededRng(seed) {
+        var s = seed | 0;
+        return function () {
+            var result = mulberry32(s);
+            s = (s + 1) | 0;
+            return result;
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════
 
@@ -24,6 +44,10 @@
         isCompetitive: false,
         playerHistory: [],
         enemyHistory: [],
+        playerHarvestCount: 0,
+        enemyHarvestCount: 0,
+        playerRng: null,
+        enemyRng: null,
     };
 
     function resetState() {
@@ -34,6 +58,10 @@
         state.enemyIsHarvesting = false;
         state.playerHistory = [];
         state.enemyHistory = [];
+        state.playerHarvestCount = 0;
+        state.enemyHarvestCount = 0;
+        state.playerRng = createSeededRng(0);
+        state.enemyRng = createSeededRng(0);
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
                 state.grid[r][c] = 0;
@@ -254,8 +282,9 @@
 
     function stepGrowth(isEnemy) {
         var targetGrid = isEnemy ? state.enemyGrid : state.grid;
-        var r = Math.floor(Math.random() * GRID_SIZE);
-        var c = Math.floor(Math.random() * GRID_SIZE);
+        var rng = isEnemy ? state.enemyRng : state.playerRng;
+        var r = Math.floor(rng() * GRID_SIZE);
+        var c = Math.floor(rng() * GRID_SIZE);
         if (targetGrid[r][c] < MAX_AGE) {
             targetGrid[r][c]++;
             var visualFrozen = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
@@ -277,9 +306,13 @@
         if (isEnemy) {
             state.enemyYield += grownCount;
             state.enemyIsHarvesting = true;
+            state.enemyHarvestCount++;
+            state.enemyRng = createSeededRng(state.enemyHarvestCount);
         } else {
             state.totalYield += grownCount;
             state.isHarvesting = true;
+            state.playerHarvestCount++;
+            state.playerRng = createSeededRng(state.playerHarvestCount);
         }
 
         for (let r = 0; r < GRID_SIZE; r++) {
@@ -517,6 +550,9 @@
             statYieldTimeEnemy: document.getElementById('stat-yield-time-enemy'),
             statYieldPlayer: document.getElementById('stat-yield-player'),
             statYieldEnemy: document.getElementById('stat-yield-enemy'),
+            statHarvests: document.getElementById('stat-harvests'),
+            statHarvestsPlayer: document.getElementById('stat-harvests-player'),
+            statHarvestsEnemy: document.getElementById('stat-harvests-enemy'),
             strategySelect: document.getElementById('strategy-select'),
             competeToggle: document.getElementById('compete-toggle'),
             enemyStrategy: document.getElementById('enemy-strategy'),
@@ -566,6 +602,9 @@
         dom.statYieldTimePlayer.textContent = yieldPerTime.toFixed(4);
         var enemyYieldPerTime = state.totalTicks > 0 ? (state.enemyYield / state.totalTicks) : 0;
         dom.statYieldTimeEnemy.textContent = enemyYieldPerTime.toFixed(4);
+        dom.statHarvests.textContent = state.playerHarvestCount;
+        dom.statHarvestsPlayer.textContent = state.playerHarvestCount;
+        dom.statHarvestsEnemy.textContent = state.enemyHarvestCount;
     }
 
     function getStrategyConfig(isEnemy) {
