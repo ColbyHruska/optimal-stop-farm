@@ -92,7 +92,7 @@
             return expectedTicksForNextGrowth > MAX_AGE;
         },
 
-        true_expected_value(grid) {
+        smart_heuristic(grid) {
             const totalCrops = GRID_SIZE * GRID_SIZE;
             const grownCount = countFullyGrown(grid);
             if (grownCount === 0) return false;
@@ -118,12 +118,78 @@
             return marginalCostPerCrop > MAX_AGE;
         },
 
-        diminishing_returns(grid) {
+        fixed_time_lookahead(grid) {
             const totalCrops = GRID_SIZE * GRID_SIZE;
-            const grownCount = countFullyGrown(grid);
-            if (grownCount === totalCrops) return true;
-            if (grownCount === 0) return false;
-            return (grownCount / totalCrops) > 0.85;
+            const N = totalCrops;
+            const M = MAX_AGE;
+
+            if (!STRATEGIES.dpCache) {
+                const MAX_K = 2000;
+                // P[k][h] = prob of exactly h hits in k ticks
+                const P = [];
+                for (let k = 0; k <= MAX_K; k++) {
+                    P.push(new Float64Array(M + 1));
+                }
+                P[0][0] = 1.0;
+                for (let k = 1; k <= MAX_K; k++) {
+                    P[k][0] = P[k - 1][0] * (1 - 1 / N);
+                    for (let h = 1; h < M; h++) {
+                        P[k][h] = P[k - 1][h] * (1 - 1 / N) + P[k - 1][h - 1] * (1 / N);
+                    }
+                    // For M, it's >= M hits
+                    P[k][M] = P[k - 1][M] + P[k - 1][M - 1] * (1 / N);
+                }
+
+                let maxRate = 0;
+                for (let k = 1; k <= MAX_K; k++) {
+                    let expectedYield = N * P[k][M];
+                    let rate = expectedYield / k;
+                    if (rate > maxRate) {
+                        maxRate = rate;
+                    }
+                }
+
+                STRATEGIES.dpCache = P;
+                STRATEGIES.lambdaStar = maxRate;
+                STRATEGIES.MAX_K = MAX_K;
+            }
+
+            let currentYield = countFullyGrown(grid);
+            if (currentYield === N) return true;
+            if (currentYield === 0) return false;
+
+            const ageCounts = new Array(M + 1).fill(0);
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    ageCounts[grid[r][c]]++;
+                }
+            }
+
+            let maxExpectedSurplus = 0;
+            for (let k = 1; k <= STRATEGIES.MAX_K; k++) {
+                let expectedYield = 0;
+                for (let age = 0; age <= M; age++) {
+                    if (ageCounts[age] === 0) continue;
+                    let rem = M - age;
+                    if (rem === 0) {
+                        expectedYield += ageCounts[age];
+                        continue;
+                    }
+
+                    let probReachingM = 0;
+                    for (let h = rem; h <= M; h++) {
+                        probReachingM += STRATEGIES.dpCache[k][h];
+                    }
+                    expectedYield += ageCounts[age] * probReachingM;
+                }
+
+                let surplus = expectedYield - STRATEGIES.lambdaStar * k;
+                if (surplus > maxExpectedSurplus) {
+                    maxExpectedSurplus = surplus;
+                }
+            }
+
+            return currentYield >= maxExpectedSurplus;
         },
     };
 
