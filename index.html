@@ -84,7 +84,7 @@
                     <div class="control-group">
                         <label for="strategy-select" id="right-strategy-label">Farm Strategy:</label>
                         <select id="strategy-select">
-                            <option value="manual">Manual (Player)</option>
+                            <option value="manual">Manual</option>
                             <option value="threshold">Threshold</option>
                             <option value="naive_heuristic">Crude Expected Value</option>
                             <option value="smart_heuristic">Smarter Expected Value</option>
@@ -106,9 +106,8 @@
                         <select id="enemy-strategy" class="hidden">
                             <option value="threshold">Threshold</option>
                             <option value="naive_heuristic">Crude Expected Value</option>
-                            <option value="true_expected_value">Markov Expected Value</option>
-                            <option value="diminishing_returns">Diminishing Returns</option>
-                            <option value="optimal_dp">Optimal DP</option>
+                            <option value="smart_heuristic">Smarter Expected Value</option>
+                            <option value="fixed_time_lookahead">Fixed-Time Lookahead</option>
                         </select>
                         <div id="enemy-threshold-group" class="hidden threshold-sub-group">
                             <label for="enemy-threshold">Harvest at: <span
