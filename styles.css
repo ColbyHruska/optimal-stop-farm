@@ -1,3 +1,5 @@
+/* ── Design Tokens ──────────────────────────────────────────── */
+
 :root {
     --bg-color: #1a1a1a;
     --panel-bg: #2d2d2d;
@@ -8,8 +10,8 @@
     --danger-color: #f44336;
     --danger-hover: #da190b;
     --border-color: #444;
-
     --grid-bg: #3e2723;
+    --pause-color: #ff9800;
 
     font-family: 'VT323', monospace;
 }
@@ -20,12 +22,20 @@
     padding: 0;
 }
 
+/* ── Utility ────────────────────────────────────────────────── */
+
+.hidden {
+    display: none !important;
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+
 body {
     background-color: var(--bg-color);
     color: var(--text-main);
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     min-height: 100vh;
     font-size: 1.2rem;
 }
@@ -37,7 +47,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    padding: 20px 0 40px;
 }
+
+/* ── Header ─────────────────────────────────────────────────── */
 
 header {
     text-align: center;
@@ -55,12 +68,16 @@ header p {
     color: var(--text-muted);
 }
 
+/* ── Dashboard ──────────────────────────────────────────────── */
+
 .dashboard {
     display: flex;
     gap: 30px;
     flex-wrap: wrap;
     justify-content: center;
 }
+
+/* ── Farm Sections ──────────────────────────────────────────── */
 
 .farm-section {
     flex: 1 1 500px;
@@ -69,6 +86,26 @@ header p {
     justify-content: flex-start;
     align-items: center;
 }
+
+.farm-content {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.farm-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.farm-title {
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 1.8rem;
+    color: var(--accent-color);
+}
+
+/* ── Farm Grid ──────────────────────────────────────────────── */
 
 .farm-grid {
     display: grid;
@@ -82,16 +119,89 @@ header p {
 }
 
 .crop-cell {
-    width: 40px;
-    height: 40px;
+    width: clamp(28px, 5vw, 40px);
+    height: clamp(28px, 5vw, 40px);
     background-color: var(--grid-bg);
     background-size: 100% 100%;
     background-position: center;
     background-repeat: no-repeat;
     image-rendering: pixelated;
+    contain: strict;
 }
 
-/* Right Panels */
+.crop-cell.stage-0 {
+    background-image: url('assets/stage_0.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-1 {
+    background-image: url('assets/stage_1.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-2 {
+    background-image: url('assets/stage_2.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-3 {
+    background-image: url('assets/stage_3.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-4 {
+    background-image: url('assets/stage_4.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-5 {
+    background-image: url('assets/stage_5.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-6 {
+    background-image: url('assets/stage_6.png'), url('assets/dirt.png');
+}
+
+.crop-cell.stage-7 {
+    background-image: url('assets/stage_7.png'), url('assets/dirt.png');
+}
+
+.crop-cell.water {
+    background-image: url('assets/water.png'), url('assets/dirt.png');
+}
+
+/* ── Inline Stats (competitive mode) ────────────────────────── */
+
+.comp-inline-stats {
+    margin-bottom: 0;
+    min-width: 150px;
+}
+
+.stat-column {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-divider-top {
+    border-top: 1px dashed var(--border-color);
+    padding-top: 15px;
+    margin-top: 10px;
+}
+
+.stat-label--inline {
+    margin-bottom: 5px;
+}
+
+.stat-label--subtle {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    font-weight: normal;
+    margin-bottom: 5px;
+}
+
+.stat-value--large {
+    font-size: 1.4rem;
+    color: white;
+}
+
+/* ── Control Panels ─────────────────────────────────────────── */
+
 .control-section {
     flex: 0 1 400px;
     display: flex;
@@ -113,6 +223,8 @@ header p {
     border-bottom: 1px dashed var(--border-color);
     padding-bottom: 5px;
 }
+
+/* ── Stat Boxes ─────────────────────────────────────────────── */
 
 .stat-box {
     display: flex;
@@ -146,12 +258,7 @@ header p {
     margin-bottom: 10px;
 }
 
-.farm-title {
-    text-align: center;
-    margin-bottom: 10px;
-    font-size: 1.8rem;
-    color: var(--accent-color);
-}
+/* ── Controls ───────────────────────────────────────────────── */
 
 .control-group {
     margin-bottom: 20px;
@@ -162,6 +269,14 @@ header p {
 
 .control-group label {
     font-size: 1.3rem;
+}
+
+.label--spaced {
+    margin-top: 15px;
+}
+
+.threshold-sub-group {
+    margin-top: 10px;
 }
 
 select,
@@ -179,6 +294,8 @@ input[type="range"] {
 select {
     padding: 10px;
 }
+
+/* ── Buttons ────────────────────────────────────────────────── */
 
 .button-group {
     display: flex;
@@ -211,6 +328,15 @@ select {
     background-color: var(--accent-hover);
 }
 
+.pause-btn {
+    background-color: var(--pause-color);
+    color: white;
+}
+
+.pause-btn:hover {
+    background-color: #e68900;
+}
+
 .secondary-btn {
     background-color: #555;
     color: white;
@@ -236,4 +362,113 @@ select {
 
 .harvest-btn:hover {
     background-color: #0b7dda;
+}
+
+.harvest-btn--full {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 450px;
+    font-size: 2rem;
+    padding: 15px;
+}
+
+/* ── Chart Section ──────────────────────────────────────────── */
+
+.chart-section {
+    flex: 1 1 100%;
+}
+
+.chart-panel {
+    width: 100%;
+}
+
+.chart-panel canvas {
+    width: 100%;
+    height: 220px;
+    display: block;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+}
+
+.chart-section--dual .chart-panel canvas {
+    height: 300px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .app-container {
+        width: 100%;
+        padding: 10px;
+    }
+
+    header h1 {
+        font-size: 2.2rem;
+    }
+
+    .dashboard {
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .farm-section {
+        flex: 1 1 auto;
+    }
+
+    .farm-content {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .comp-inline-stats {
+        min-width: unset;
+        width: 100%;
+    }
+
+    .control-section {
+        flex: 1 1 auto;
+    }
+
+    .crop-cell {
+        width: clamp(24px, 8vw, 36px);
+        height: clamp(24px, 8vw, 36px);
+    }
+
+    .harvest-btn--full {
+        max-width: 100%;
+        font-size: 1.6rem;
+    }
+}
+
+@media (max-width: 480px) {
+    header h1 {
+        font-size: 1.8rem;
+    }
+
+    .panel h2 {
+        font-size: 1.4rem;
+    }
+
+    .stat-box {
+        font-size: 1.2rem;
+    }
+
+    .stat-box.highlight {
+        font-size: 1.3rem;
+    }
+
+    .btn {
+        font-size: 1.2rem;
+        padding: 10px;
+    }
+
+    .crop-cell {
+        width: clamp(20px, 9vw, 32px);
+        height: clamp(20px, 9vw, 32px);
+    }
+
+    .chart-panel canvas {
+        height: 180px;
+    }
 }

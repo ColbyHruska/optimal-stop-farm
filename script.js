@@ -1,367 +1,634 @@
-const GRID_SIZE = 9;
-const MAX_AGE = 7;
-const WATER_SPEED_MS = 100;
-const WATER_CLEAR_MS = 300;
-let grid = [];
-let enemyGrid = [];
-let totalYield = 0;
-let totalTicks = 0;
-let enemyYield = 0;
-let isPlaying = false;
-let simulationInterval = null;
-let currentSpeed = 50;
-let isHarvesting = false;
-let enemyIsHarvesting = false;
-let isCompetitive = false;
-const gridContainer = document.getElementById('farm-grid');
-const enemyGridContainer = document.getElementById('enemy-farm-grid');
-const statYield = document.getElementById('stat-yield');
-const statTicks = document.getElementById('stat-ticks');
-const statYieldTime = document.getElementById('stat-yield-time');
-const stdStatsBlock = document.getElementById('standard-stats');
-const playerInlineStats = document.getElementById('player-inline-stats');
-const statYieldTimePlayer = document.getElementById('stat-yield-time-player');
-const statYieldTimeEnemy = document.getElementById('stat-yield-time-enemy');
-const statYieldPlayer = document.getElementById('stat-yield-player');
-const statYieldEnemy = document.getElementById('stat-yield-enemy');
-const strategySelect = document.getElementById('strategy-select');
-const competeToggle = document.getElementById('compete-toggle');
-const competeGroup = document.getElementById('compete-group');
-const enemyStrategy = document.getElementById('enemy-strategy');
-const playerFarmTitle = document.getElementById('player-farm-title');
-const enemySection = document.getElementById('enemy-section');
-const speedSlider = document.getElementById('speed-slider');
-const speedLabel = document.getElementById('speed-label');
-const btnPlayPause = document.getElementById('btn-play-pause');
-const btnStep = document.getElementById('btn-step');
-const btnHarvest = document.getElementById('btn-harvest');
-const btnReset = document.getElementById('btn-reset');
-const rightStrategyLabel = document.getElementById('right-strategy-label');
-const leftStrategyLabel = document.getElementById('left-strategy-label');
+(function () {
+    'use strict';
 
-const playerThresholdGroup = document.getElementById('player-threshold-group');
-const playerThreshold = document.getElementById('player-threshold');
-const playerThresholdLabel = document.getElementById('player-threshold-label');
+    // ═══════════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════════
 
-const enemyThresholdGroup = document.getElementById('enemy-threshold-group');
-const enemyThreshold = document.getElementById('enemy-threshold');
-const enemyThresholdLabel = document.getElementById('enemy-threshold-label');
-function init() {
-    createGrid();
-    resetSimulation();
-    setupEventListeners();
-    updateUI();
-}
-function createGrid() {
-    gridContainer.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
-    gridContainer.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
-    gridContainer.innerHTML = '';
-    enemyGridContainer.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
-    enemyGridContainer.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
-    enemyGridContainer.innerHTML = '';
-    for (let r = 0; r < GRID_SIZE; r++) {
-        let row = [];
-        let enemyRow = [];
-        for (let c = 0; c < GRID_SIZE; c++) {
-            const cell = document.createElement('div');
-            cell.classList.add('crop-cell');
-            cell.id = `cell-${r}-${c}`;
-            gridContainer.appendChild(cell);
-            row.push(0);
-            const enemyCell = document.createElement('div');
-            enemyCell.classList.add('crop-cell');
-            enemyCell.id = `enemy-cell-${r}-${c}`;
-            enemyGridContainer.appendChild(enemyCell);
-            enemyRow.push(0);
-        }
-        grid.push(row);
-        enemyGrid.push(enemyRow);
-    }
-}
-function resetSimulation() {
-    pauseSimulation();
-    totalYield = 0;
-    totalTicks = 0;
-    enemyYield = 0;
-    isHarvesting = false;
-    enemyIsHarvesting = false;
-    for (let r = 0; r < GRID_SIZE; r++) {
-        for (let c = 0; c < GRID_SIZE; c++) {
-            grid[r][c] = 0;
-            updateCellVisual(r, c, false);
-            enemyGrid[r][c] = 0;
-            updateCellVisual(r, c, true);
-        }
-    }
-    updateUI();
-}
-function updateCellVisual(r, c, isEnemy) {
-    const age = isEnemy ? enemyGrid[r][c] : grid[r][c];
-    const cellId = isEnemy ? `enemy-cell-${r}-${c}` : `cell-${r}-${c}`;
-    const cell = document.getElementById(cellId);
-    if (cell) {
-        cell.style.backgroundImage = `url('assets/stage_${age}.png'), url('assets/dirt.png')`;
-    }
-}
-function updateUI() {
-    statYield.innerText = totalYield.toLocaleString();
-    statTicks.innerText = totalTicks.toLocaleString();
-    const yieldPerTime = totalTicks > 0 ? (totalYield / totalTicks) : 0;
-    statYieldTime.innerText = yieldPerTime.toFixed(4);
-    statYieldPlayer.innerText = totalYield.toLocaleString();
-    statYieldEnemy.innerText = enemyYield.toLocaleString();
-    statYieldTimePlayer.innerText = yieldPerTime.toFixed(4);
-    const enemyYieldPerTime = totalTicks > 0 ? (enemyYield / totalTicks) : 0;
-    statYieldTimeEnemy.innerText = enemyYieldPerTime.toFixed(4);
-}
-function stepSimulation() {
-    if (!isHarvesting || !enemyIsHarvesting) {
-        totalTicks++;
-    }
-    if (!isHarvesting) {
-        const r = Math.floor(Math.random() * GRID_SIZE);
-        const c = Math.floor(Math.random() * GRID_SIZE);
-        if (grid[r][c] < MAX_AGE) {
-            grid[r][c]++;
-            updateCellVisual(r, c, false);
-        }
-        if (evaluateStrategy(grid, strategySelect.value, false)) {
-            doHarvest(false);
-        }
-    }
-    if (isCompetitive && !enemyIsHarvesting) {
-        const r = Math.floor(Math.random() * GRID_SIZE);
-        const c = Math.floor(Math.random() * GRID_SIZE);
-        if (enemyGrid[r][c] < MAX_AGE) {
-            enemyGrid[r][c]++;
-            updateCellVisual(r, c, true);
-        }
-        if (evaluateStrategy(enemyGrid, enemyStrategy.value, true)) {
-            doHarvest(true);
-        }
-    }
-    updateUI();
-}
-function countFullyGrown(g) {
-    let grown = 0;
-    for (let r = 0; r < GRID_SIZE; r++) {
-        for (let c = 0; c < GRID_SIZE; c++) {
-            if (g[r][c] === MAX_AGE) grown++;
-        }
-    }
-    return grown;
-}
-function doHarvest(isEnemy = false) {
-    let targetGrid = isEnemy ? enemyGrid : grid;
-    const grownCount = countFullyGrown(targetGrid);
-    if (isEnemy) {
-        enemyYield += grownCount;
-        enemyIsHarvesting = true;
-    } else {
-        totalYield += grownCount;
-        isHarvesting = true;
-    }
-    let row = 0;
-    function animateWaterRow() {
-        const isStillHarvesting = isEnemy ? enemyIsHarvesting : isHarvesting;
-        if (!isStillHarvesting) return;
-        if (row < GRID_SIZE) {
+    const GRID_SIZE = 9;
+    const MAX_AGE = 7;
+    const WATER_SPEED_MS = 100;
+    const WATER_CLEAR_MS = 300;
+
+    const state = {
+        grid: [],
+        enemyGrid: [],
+        totalYield: 0,
+        totalTicks: 0,
+        enemyYield: 0,
+        isPlaying: false,
+        simulationInterval: null,
+        currentSpeed: 50,
+        isHarvesting: false,
+        enemyIsHarvesting: false,
+        isCompetitive: false,
+        playerHistory: [],
+        enemyHistory: [],
+    };
+
+    function resetState() {
+        state.totalYield = 0;
+        state.totalTicks = 0;
+        state.enemyYield = 0;
+        state.isHarvesting = false;
+        state.enemyIsHarvesting = false;
+        state.playerHistory = [];
+        state.enemyHistory = [];
+        for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
-                const cellId = isEnemy ? `enemy-cell-${row}-${c}` : `cell-${row}-${c}`;
-                const cell = document.getElementById(cellId);
-                if (cell) {
-                    cell.style.backgroundImage = `url('assets/water.png'), url('assets/dirt.png')`;
+                state.grid[r][c] = 0;
+                state.enemyGrid[r][c] = 0;
+            }
+        }
+    }
+
+    function initGridArrays() {
+        state.grid = [];
+        state.enemyGrid = [];
+        for (let r = 0; r < GRID_SIZE; r++) {
+            const row = [];
+            const enemyRow = [];
+            for (let c = 0; c < GRID_SIZE; c++) {
+                row.push(0);
+                enemyRow.push(0);
+            }
+            state.grid.push(row);
+            state.enemyGrid.push(enemyRow);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STRATEGIES
+    // ═══════════════════════════════════════════════════════════════
+
+    function countFullyGrown(grid) {
+        let grown = 0;
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (grid[r][c] === MAX_AGE) grown++;
+            }
+        }
+        return grown;
+    }
+
+    const STRATEGIES = {
+        manual() {
+            return false;
+        },
+
+        threshold(grid, config) {
+            const totalCrops = GRID_SIZE * GRID_SIZE;
+            const grownCount = countFullyGrown(grid);
+            const requiredCrops = Math.ceil((totalCrops * config.thresholdPct) / 100);
+            return grownCount >= requiredCrops;
+        },
+
+        naive_heuristic(grid) {
+            const totalCrops = GRID_SIZE * GRID_SIZE;
+            const grownCount = countFullyGrown(grid);
+            const remaining = totalCrops - grownCount;
+            if (remaining === 0) return true;
+            const expectedTicksForNextGrowth = totalCrops / remaining;
+            return expectedTicksForNextGrowth > MAX_AGE;
+        },
+
+        true_expected_value(grid) {
+            const totalCrops = GRID_SIZE * GRID_SIZE;
+            const grownCount = countFullyGrown(grid);
+            if (grownCount === 0) return false;
+            if (grownCount === totalCrops) return true;
+
+            const ageCounts = new Array(MAX_AGE + 1).fill(0);
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    ageCounts[grid[r][c]]++;
                 }
             }
-            row++;
-            setTimeout(animateWaterRow, WATER_SPEED_MS);
-        } else {
-            setTimeout(() => {
-                const isStillHarvestingAfterWait = isEnemy ? enemyIsHarvesting : isHarvesting;
-                if (!isStillHarvestingAfterWait) return;
-                for (let r = 0; r < GRID_SIZE; r++) {
-                    for (let c = 0; c < GRID_SIZE; c++) {
-                        targetGrid[r][c] = 0;
-                        updateCellVisual(r, c, isEnemy);
-                    }
-                }
-                if (isEnemy) enemyIsHarvesting = false;
-                else isHarvesting = false;
-            }, WATER_CLEAR_MS);
-        }
-    }
-    animateWaterRow();
-}
-function evaluateStrategy(g, strategy, isEnemy = false) {
-    const totalCrops = GRID_SIZE * GRID_SIZE;
-    const grownCount = countFullyGrown(g);
-    if (strategy === 'manual') {
-        return false;
-    }
-    else if (strategy === 'threshold') {
-        const thresholdPct = isEnemy ? parseInt(enemyThreshold.value) : parseInt(playerThreshold.value);
-        const requiredCrops = Math.ceil((totalCrops * thresholdPct) / 100);
-        return grownCount >= requiredCrops;
-    }
-    else if (strategy === 'naive_heuristic') {
-        const remaining = totalCrops - grownCount;
-        if (remaining === 0) return true;
-        const expectedTicksForNextGrowth = totalCrops / remaining;
-        const averageTicksPerYieldFromScratch = MAX_AGE;
 
-        if (expectedTicksForNextGrowth > averageTicksPerYieldFromScratch) {
-            return true;
-        }
-        return false;
-    }
-    else if (strategy === 'true_expected_value') {
-        const remaining = totalCrops - grownCount;
-        if (remaining === 0) return true;
+            let remainingHits = 0;
+            for (let age = 0; age < MAX_AGE; age++) {
+                remainingHits += ageCounts[age] * (MAX_AGE - age);
+            }
 
-        let expectedTicksToFinish = 0;
-        let flattenedGrownCount = 0;
+            const remaining = totalCrops - grownCount;
+            const avgCostPerHit = totalCrops / remaining;
+            const expectedTicks = remainingHits * avgCostPerHit;
+            const marginalCostPerCrop = expectedTicks / remaining;
+
+            return marginalCostPerCrop > MAX_AGE;
+        },
+
+        diminishing_returns(grid) {
+            const totalCrops = GRID_SIZE * GRID_SIZE;
+            const grownCount = countFullyGrown(grid);
+            if (grownCount === totalCrops) return true;
+            if (grownCount === 0) return false;
+            return (grownCount / totalCrops) > 0.85;
+        },
+    };
+
+    function evaluateStrategy(grid, strategyName, config) {
+        const fn = STRATEGIES[strategyName];
+        if (!fn) return false;
+        return fn(grid, config);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GRID
+    // ═══════════════════════════════════════════════════════════════
+
+    function createGrid(gridContainer, enemyGridContainer) {
+        gridContainer.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
+        gridContainer.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
+        gridContainer.innerHTML = '';
+        enemyGridContainer.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
+        enemyGridContainer.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
+        enemyGridContainer.innerHTML = '';
 
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
-                flattenedGrownCount += g[r][c];
+                var cell = document.createElement('div');
+                cell.classList.add('crop-cell');
+                cell.id = 'cell-' + r + '-' + c;
+                gridContainer.appendChild(cell);
+
+                var enemyCell = document.createElement('div');
+                enemyCell.classList.add('crop-cell');
+                enemyCell.id = 'enemy-cell-' + r + '-' + c;
+                enemyGridContainer.appendChild(enemyCell);
             }
         }
+    }
 
-        const maxPossibleStages = totalCrops * MAX_AGE;
-        const remainingStages = maxPossibleStages - flattenedGrownCount;
+    var STAGE_CLASSES = ['stage-0', 'stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5', 'stage-6', 'stage-7', 'water'];
 
-        expectedTicksToFinish = remainingStages * (totalCrops / (remaining || 1));
+    function setCellClass(cell, cls) {
+        for (var i = 0; i < STAGE_CLASSES.length; i++) {
+            cell.classList.remove(STAGE_CLASSES[i]);
+        }
+        cell.classList.add(cls);
+    }
 
-        if ((expectedTicksToFinish / remaining) > MAX_AGE) {
+    function updateCellVisual(r, c, isEnemy) {
+        var age = isEnemy ? state.enemyGrid[r][c] : state.grid[r][c];
+        var cellId = isEnemy ? ('enemy-cell-' + r + '-' + c) : ('cell-' + r + '-' + c);
+        var cell = document.getElementById(cellId);
+        if (cell) setCellClass(cell, 'stage-' + age);
+    }
+
+    function resetAllVisuals() {
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                updateCellVisual(r, c, false);
+                updateCellVisual(r, c, true);
+            }
+        }
+    }
+
+    function stepGrowth(isEnemy) {
+        var targetGrid = isEnemy ? state.enemyGrid : state.grid;
+        var r = Math.floor(Math.random() * GRID_SIZE);
+        var c = Math.floor(Math.random() * GRID_SIZE);
+        if (targetGrid[r][c] < MAX_AGE) {
+            targetGrid[r][c]++;
+            var visualFrozen = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
+            if (!visualFrozen) {
+                updateCellVisual(r, c, isEnemy);
+            }
             return true;
         }
         return false;
     }
-    else if (strategy === 'diminishing_returns') {
-        if (grownCount === totalCrops) return true;
-        if (grownCount === 0) return false;
 
-        const wastedHitProbability = grownCount / totalCrops;
+    function doHarvest(isEnemy) {
+        var targetGrid = isEnemy ? state.enemyGrid : state.grid;
+        if (isEnemy && state.enemyIsHarvesting) return;
+        if (!isEnemy && state.isHarvesting) return;
 
-        if (wastedHitProbability > 0.85) {
-            return true;
-        }
-        return false;
-    }
-    return false;
-}
-function setSimulationSpeed() {
-    const maxInterval = 500;
-    const minInterval = 10;
-    const interval = maxInterval - ((currentSpeed - 1) / 99) * (maxInterval - minInterval);
-    if (isPlaying) {
-        clearInterval(simulationInterval);
-        simulationInterval = setInterval(stepSimulation, interval);
-    }
-}
-function togglePlayPause() {
-    isPlaying = !isPlaying;
-    if (isPlaying) {
-        btnPlayPause.innerText = 'Pause';
-        btnPlayPause.classList.remove('primary-btn');
-        btnPlayPause.style.backgroundColor = '#ff9800';
-        setSimulationSpeed();
-    } else {
-        pauseSimulation();
-    }
-}
-function pauseSimulation() {
-    isPlaying = false;
-    btnPlayPause.innerText = 'Play';
-    btnPlayPause.classList.add('primary-btn');
-    btnPlayPause.style.backgroundColor = '';
-    clearInterval(simulationInterval);
-}
-function setupEventListeners() {
-    btnPlayPause.addEventListener('click', togglePlayPause);
-    btnStep.addEventListener('click', () => {
-        pauseSimulation();
-        stepSimulation();
-    });
-    btnHarvest.addEventListener('click', () => {
-        if (!isHarvesting) {
-            doHarvest();
-        }
-    });
-    btnReset.addEventListener('click', resetSimulation);
-    strategySelect.addEventListener('change', (e) => {
-        if (e.target.value === 'manual') {
-            btnHarvest.style.display = 'block';
+        var grownCount = countFullyGrown(targetGrid);
+
+        if (isEnemy) {
+            state.enemyYield += grownCount;
+            state.enemyIsHarvesting = true;
         } else {
-            btnHarvest.style.display = 'none';
+            state.totalYield += grownCount;
+            state.isHarvesting = true;
         }
 
-        if (e.target.value === 'threshold') {
-            playerThresholdGroup.style.display = 'flex';
-        } else {
-            playerThresholdGroup.style.display = 'none';
-        }
-    });
-
-    enemyStrategy.addEventListener('change', (e) => {
-        if (e.target.value === 'threshold') {
-            enemyThresholdGroup.style.display = 'flex';
-        } else {
-            enemyThresholdGroup.style.display = 'none';
-        }
-    });
-    competeToggle.addEventListener('change', (e) => {
-        isCompetitive = e.target.checked;
-        if (isCompetitive) {
-            enemySection.style.display = 'flex';
-            playerFarmTitle.style.display = 'block';
-            leftStrategyLabel.style.display = 'block';
-            enemyStrategy.style.display = 'block';
-
-            // Re-check inner strategy to restore slider if it was on threshold
-            if (enemyStrategy.value === 'threshold') {
-                enemyThresholdGroup.style.display = 'flex';
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                targetGrid[r][c] = 0;
             }
-
-            playerInlineStats.style.display = 'block';
-            stdStatsBlock.style.display = 'none';
-            rightStrategyLabel.innerText = 'Right Farm Strategy:';
-        } else {
-            enemySection.style.display = 'none';
-            playerFarmTitle.style.display = 'none';
-            leftStrategyLabel.style.display = 'none';
-            enemyStrategy.style.display = 'none';
-            enemyThresholdGroup.style.display = 'none'; // Fix: Force hide
-            playerInlineStats.style.display = 'none';
-            stdStatsBlock.style.display = 'block';
-            rightStrategyLabel.innerText = 'Farm Strategy:';
         }
+
+        // Purely cosmetic water animation
+        var row = 0;
+        function animateWaterRow() {
+            var isStillHarvesting = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
+            if (!isStillHarvesting) return;
+
+            if (row < GRID_SIZE) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    var cellId = isEnemy ? ('enemy-cell-' + row + '-' + c) : ('cell-' + row + '-' + c);
+                    var cell = document.getElementById(cellId);
+                    if (cell) setCellClass(cell, 'water');
+                }
+                row++;
+                setTimeout(animateWaterRow, WATER_SPEED_MS);
+            } else {
+                setTimeout(function () {
+                    var stillHarvesting = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
+                    if (!stillHarvesting) return;
+                    // Re-sync visuals to actual grid state (may have grown during animation)
+                    for (let r = 0; r < GRID_SIZE; r++) {
+                        for (let c = 0; c < GRID_SIZE; c++) {
+                            updateCellVisual(r, c, isEnemy);
+                        }
+                    }
+                    if (isEnemy) state.enemyIsHarvesting = false;
+                    else state.isHarvesting = false;
+                }, WATER_CLEAR_MS);
+            }
+        }
+        animateWaterRow();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CHART
+    // ═══════════════════════════════════════════════════════════════
+
+    var CHART_PADDING = { top: 30, right: 20, bottom: 40, left: 55 };
+    var PLAYER_COLOR = '#4CAF50';
+    var ENEMY_COLOR = '#ff9800';
+    var GRID_COLOR = 'rgba(255, 255, 255, 0.07)';
+    var AXIS_COLOR = 'rgba(255, 255, 255, 0.3)';
+    var LABEL_COLOR = 'rgba(255, 255, 255, 0.6)';
+    var TITLE_COLOR = 'rgba(255, 255, 255, 0.8)';
+    var MAX_RENDER_POINTS = 600;
+
+    var chartCanvas = null;
+    var chartCtx = null;
+    var renderScheduled = false;
+
+    function initChart(canvasEl) {
+        chartCanvas = canvasEl;
+        chartCtx = chartCanvas.getContext('2d');
+        resizeCanvas();
+    }
+
+    function resizeCanvas() {
+        if (!chartCanvas) return;
+        var rect = chartCanvas.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        chartCanvas.width = rect.width * dpr;
+        chartCanvas.height = rect.height * dpr;
+        chartCtx.scale(dpr, dpr);
+    }
+
+    function scheduleRender(playerData, enemyData, showEnemy) {
+        if (renderScheduled) return;
+        renderScheduled = true;
+        requestAnimationFrame(function () {
+            renderScheduled = false;
+            renderChart(playerData, enemyData, showEnemy);
+        });
+    }
+
+    function downsample(data, maxPoints) {
+        if (data.length <= maxPoints) return data;
+        var step = data.length / maxPoints;
+        var result = [data[0]];
+        for (var i = 1; i < maxPoints - 1; i++) {
+            result.push(data[Math.round(i * step)]);
+        }
+        result.push(data[data.length - 1]);
+        return result;
+    }
+
+    function renderChart(playerData, enemyData, showEnemy) {
+        if (!chartCtx || !chartCanvas) return;
+        var displayWidth = chartCanvas.getBoundingClientRect().width;
+        var displayHeight = chartCanvas.getBoundingClientRect().height;
+        chartCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+        var chartWidth = displayWidth - CHART_PADDING.left - CHART_PADDING.right;
+        var chartHeight = displayHeight - CHART_PADDING.top - CHART_PADDING.bottom;
+        if (chartWidth <= 0 || chartHeight <= 0) return;
+
+        var allData = showEnemy ? playerData.concat(enemyData) : playerData.slice();
+        if (allData.length === 0) {
+            chartCtx.fillStyle = LABEL_COLOR;
+            chartCtx.font = '16px "VT323", monospace';
+            chartCtx.textAlign = 'center';
+            chartCtx.fillText('No data yet \u2014 start the simulation!', displayWidth / 2, displayHeight / 2);
+            return;
+        }
+
+        var maxTick = 1, maxTotal = 1;
+        for (var i = 0; i < allData.length; i++) {
+            if (allData[i].tick > maxTick) maxTick = allData[i].tick;
+            if (allData[i].total > maxTotal) maxTotal = allData[i].total;
+        }
+        var yMax = maxTotal * 1.1;
+
+        drawGridLines(chartWidth, chartHeight, maxTick, yMax);
+        drawAxes(chartWidth, chartHeight, maxTick, yMax);
+
+        if (playerData.length > 0) drawLine(downsample(playerData, MAX_RENDER_POINTS), chartWidth, chartHeight, maxTick, yMax, PLAYER_COLOR);
+        if (showEnemy && enemyData.length > 0) drawLine(downsample(enemyData, MAX_RENDER_POINTS), chartWidth, chartHeight, maxTick, yMax, ENEMY_COLOR);
+
+        if (showEnemy) drawLegend(displayWidth);
+
+        chartCtx.fillStyle = TITLE_COLOR;
+        chartCtx.font = '14px "VT323", monospace';
+        chartCtx.textAlign = 'center';
+        chartCtx.fillText('Total Crops (Harvested + Grown) Over Time', displayWidth / 2, 16);
+    }
+
+    function drawGridLines(cw, ch, maxTick, yMax) {
+        chartCtx.strokeStyle = GRID_COLOR;
+        chartCtx.lineWidth = 1;
+        for (var i = 0; i <= 5; i++) {
+            var y = CHART_PADDING.top + (ch * i) / 5;
+            chartCtx.beginPath(); chartCtx.moveTo(CHART_PADDING.left, y); chartCtx.lineTo(CHART_PADDING.left + cw, y); chartCtx.stroke();
+        }
+        var xSteps = Math.min(Math.ceil(maxTick / 100), 10) || 1;
+        for (var j = 0; j <= xSteps; j++) {
+            var x = CHART_PADDING.left + (cw * j) / xSteps;
+            chartCtx.beginPath(); chartCtx.moveTo(x, CHART_PADDING.top); chartCtx.lineTo(x, CHART_PADDING.top + ch); chartCtx.stroke();
+        }
+    }
+
+    function drawAxes(cw, ch, maxTick, yMax) {
+        chartCtx.strokeStyle = AXIS_COLOR;
+        chartCtx.lineWidth = 1.5;
+        chartCtx.beginPath(); chartCtx.moveTo(CHART_PADDING.left, CHART_PADDING.top); chartCtx.lineTo(CHART_PADDING.left, CHART_PADDING.top + ch); chartCtx.stroke();
+        chartCtx.beginPath(); chartCtx.moveTo(CHART_PADDING.left, CHART_PADDING.top + ch); chartCtx.lineTo(CHART_PADDING.left + cw, CHART_PADDING.top + ch); chartCtx.stroke();
+
+        chartCtx.fillStyle = LABEL_COLOR;
+        chartCtx.font = '12px "VT323", monospace';
+        chartCtx.textAlign = 'right';
+        for (var i = 0; i <= 5; i++) {
+            var value = yMax * (1 - i / 5);
+            var y = CHART_PADDING.top + (ch * i) / 5;
+            chartCtx.fillText(Math.round(value).toString(), CHART_PADDING.left - 6, y + 4);
+        }
+
+        chartCtx.textAlign = 'center';
+        var xSteps = Math.min(Math.ceil(maxTick / 100), 10) || 1;
+        for (var j = 0; j <= xSteps; j++) {
+            var val = Math.round((maxTick * j) / xSteps);
+            var x = CHART_PADDING.left + (cw * j) / xSteps;
+            chartCtx.fillText(val.toString(), x, CHART_PADDING.top + ch + 18);
+        }
+
+        chartCtx.fillStyle = LABEL_COLOR;
+        chartCtx.font = '13px "VT323", monospace';
+        chartCtx.textAlign = 'center';
+        chartCtx.fillText('Ticks', CHART_PADDING.left + cw / 2, CHART_PADDING.top + ch + 34);
+        chartCtx.save();
+        chartCtx.translate(14, CHART_PADDING.top + ch / 2);
+        chartCtx.rotate(-Math.PI / 2);
+        chartCtx.fillText('Total Crops', 0, 0);
+        chartCtx.restore();
+    }
+
+    function drawLine(data, cw, ch, maxTick, yMax, color) {
+        if (data.length === 0) return;
+        chartCtx.strokeStyle = color;
+        chartCtx.lineWidth = 1.5;
+        chartCtx.lineJoin = 'round';
+        chartCtx.lineCap = 'round';
+        chartCtx.beginPath();
+        for (var i = 0; i < data.length; i++) {
+            var x = CHART_PADDING.left + (data[i].tick / maxTick) * cw;
+            var y = CHART_PADDING.top + ch - (data[i].total / yMax) * ch;
+            if (i === 0) chartCtx.moveTo(x, y);
+            else chartCtx.lineTo(x, y);
+        }
+        chartCtx.stroke();
+    }
+
+    function drawLegend(displayWidth) {
+        var legendY = CHART_PADDING.top + 4;
+        chartCtx.font = '13px "VT323", monospace';
+        chartCtx.fillStyle = PLAYER_COLOR;
+        chartCtx.fillRect(displayWidth - 170, legendY - 6, 10, 10);
+        chartCtx.fillStyle = LABEL_COLOR;
+        chartCtx.textAlign = 'left';
+        chartCtx.fillText('Right Farm', displayWidth - 156, legendY + 3);
+        chartCtx.fillStyle = ENEMY_COLOR;
+        chartCtx.fillRect(displayWidth - 86, legendY - 6, 10, 10);
+        chartCtx.fillStyle = LABEL_COLOR;
+        chartCtx.fillText('Left Farm', displayWidth - 72, legendY + 3);
+    }
+
+    function clearChart(showEnemy) {
+        renderChart([], [], showEnemy);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // MAIN
+    // ═══════════════════════════════════════════════════════════════
+
+    var dom = {};
+
+    function init() {
+        dom = {
+            gridContainer: document.getElementById('farm-grid'),
+            enemyGridContainer: document.getElementById('enemy-farm-grid'),
+            statYield: document.getElementById('stat-yield'),
+            statTicks: document.getElementById('stat-ticks'),
+            statYieldTime: document.getElementById('stat-yield-time'),
+            stdStatsBlock: document.getElementById('standard-stats'),
+            playerInlineStats: document.getElementById('player-inline-stats'),
+            statYieldTimePlayer: document.getElementById('stat-yield-time-player'),
+            statYieldTimeEnemy: document.getElementById('stat-yield-time-enemy'),
+            statYieldPlayer: document.getElementById('stat-yield-player'),
+            statYieldEnemy: document.getElementById('stat-yield-enemy'),
+            strategySelect: document.getElementById('strategy-select'),
+            competeToggle: document.getElementById('compete-toggle'),
+            enemyStrategy: document.getElementById('enemy-strategy'),
+            playerFarmTitle: document.getElementById('player-farm-title'),
+            enemySection: document.getElementById('enemy-section'),
+            speedSlider: document.getElementById('speed-slider'),
+            speedLabel: document.getElementById('speed-label'),
+            btnPlayPause: document.getElementById('btn-play-pause'),
+            btnStep: document.getElementById('btn-step'),
+            btnHarvest: document.getElementById('btn-harvest'),
+            btnReset: document.getElementById('btn-reset'),
+            rightStrategyLabel: document.getElementById('right-strategy-label'),
+            leftStrategyLabel: document.getElementById('left-strategy-label'),
+            playerThresholdGroup: document.getElementById('player-threshold-group'),
+            playerThreshold: document.getElementById('player-threshold'),
+            playerThresholdLabel: document.getElementById('player-threshold-label'),
+            enemyThresholdGroup: document.getElementById('enemy-threshold-group'),
+            enemyThreshold: document.getElementById('enemy-threshold'),
+            enemyThresholdLabel: document.getElementById('enemy-threshold-label'),
+            chartCanvas: document.getElementById('chart-canvas'),
+            chartSection: document.getElementById('chart-section'),
+        };
+
+        initGridArrays();
+        createGrid(dom.gridContainer, dom.enemyGridContainer);
+        initChart(dom.chartCanvas);
         resetSimulation();
-    });
-
-    playerThreshold.addEventListener('input', (e) => {
-        playerThresholdLabel.innerText = e.target.value;
-    });
-
-    enemyThreshold.addEventListener('input', (e) => {
-        enemyThresholdLabel.innerText = e.target.value;
-    });
-
-    if (strategySelect.value === 'manual') {
-        btnHarvest.style.display = 'block';
-    } else if (strategySelect.value === 'threshold') {
-        playerThresholdGroup.style.display = 'flex';
+        setupEventListeners();
+        updateUI();
     }
 
-    if (enemyStrategy.value === 'threshold' && competeToggle.checked) {
-        enemyThresholdGroup.style.display = 'flex';
+    function resetSimulation() {
+        pauseSimulation();
+        resetState();
+        resetAllVisuals();
+        updateUI();
+        clearChart(state.isCompetitive);
     }
-    speedSlider.addEventListener('input', (e) => {
-        currentSpeed = parseInt(e.target.value);
-        if (currentSpeed < 30) speedLabel.innerText = 'Slow';
-        else if (currentSpeed < 70) speedLabel.innerText = 'Medium';
-        else speedLabel.innerText = 'Fast';
-        setSimulationSpeed();
-    });
-}
-window.addEventListener('DOMContentLoaded', init);
+
+    function updateUI() {
+        dom.statYield.textContent = state.totalYield.toLocaleString();
+        dom.statTicks.textContent = state.totalTicks.toLocaleString();
+        var yieldPerTime = state.totalTicks > 0 ? (state.totalYield / state.totalTicks) : 0;
+        dom.statYieldTime.textContent = yieldPerTime.toFixed(4);
+        dom.statYieldPlayer.textContent = state.totalYield.toLocaleString();
+        dom.statYieldEnemy.textContent = state.enemyYield.toLocaleString();
+        dom.statYieldTimePlayer.textContent = yieldPerTime.toFixed(4);
+        var enemyYieldPerTime = state.totalTicks > 0 ? (state.enemyYield / state.totalTicks) : 0;
+        dom.statYieldTimeEnemy.textContent = enemyYieldPerTime.toFixed(4);
+    }
+
+    function getStrategyConfig(isEnemy) {
+        return {
+            thresholdPct: parseInt(isEnemy ? dom.enemyThreshold.value : dom.playerThreshold.value),
+        };
+    }
+
+    function recordSnapshot() {
+        state.playerHistory.push({
+            tick: state.totalTicks,
+            total: state.totalYield + countFullyGrown(state.grid),
+        });
+        if (state.isCompetitive) {
+            state.enemyHistory.push({
+                tick: state.totalTicks,
+                total: state.enemyYield + countFullyGrown(state.enemyGrid),
+            });
+        }
+    }
+
+    function stepSimulation() {
+        state.totalTicks++;
+
+        stepGrowth(false);
+        if (!state.isHarvesting && evaluateStrategy(state.grid, dom.strategySelect.value, getStrategyConfig(false))) {
+            doHarvest(false);
+        }
+
+        if (state.isCompetitive) {
+            stepGrowth(true);
+            if (!state.enemyIsHarvesting && evaluateStrategy(state.enemyGrid, dom.enemyStrategy.value, getStrategyConfig(true))) {
+                doHarvest(true);
+            }
+        }
+
+        recordSnapshot();
+        scheduleRender(state.playerHistory, state.enemyHistory, state.isCompetitive);
+        updateUI();
+    }
+
+    function setSimulationSpeed() {
+        var maxInterval = 500;
+        var minInterval = 10;
+        var interval = maxInterval - ((state.currentSpeed - 1) / 99) * (maxInterval - minInterval);
+        if (state.isPlaying) {
+            clearInterval(state.simulationInterval);
+            state.simulationInterval = setInterval(stepSimulation, interval);
+        }
+    }
+
+    function togglePlayPause() {
+        state.isPlaying = !state.isPlaying;
+        if (state.isPlaying) {
+            dom.btnPlayPause.innerText = 'Pause';
+            dom.btnPlayPause.classList.remove('primary-btn');
+            dom.btnPlayPause.classList.add('pause-btn');
+            setSimulationSpeed();
+        } else {
+            pauseSimulation();
+        }
+    }
+
+    function pauseSimulation() {
+        state.isPlaying = false;
+        dom.btnPlayPause.innerText = 'Play';
+        dom.btnPlayPause.classList.add('primary-btn');
+        dom.btnPlayPause.classList.remove('pause-btn');
+        clearInterval(state.simulationInterval);
+    }
+
+    function setupEventListeners() {
+        dom.btnPlayPause.addEventListener('click', togglePlayPause);
+        dom.btnStep.addEventListener('click', function () { pauseSimulation(); stepSimulation(); });
+        dom.btnHarvest.addEventListener('click', function () { if (!state.isHarvesting) doHarvest(false); });
+        dom.btnReset.addEventListener('click', resetSimulation);
+
+        dom.strategySelect.addEventListener('change', function (e) {
+            dom.btnHarvest.classList.toggle('hidden', e.target.value !== 'manual');
+            dom.playerThresholdGroup.classList.toggle('hidden', e.target.value !== 'threshold');
+        });
+
+        dom.enemyStrategy.addEventListener('change', function (e) {
+            dom.enemyThresholdGroup.classList.toggle('hidden', e.target.value !== 'threshold');
+        });
+
+        dom.competeToggle.addEventListener('change', function (e) {
+            state.isCompetitive = e.target.checked;
+            if (state.isCompetitive) {
+                dom.enemySection.classList.remove('hidden');
+                dom.playerFarmTitle.classList.remove('hidden');
+                dom.leftStrategyLabel.classList.remove('hidden');
+                dom.enemyStrategy.classList.remove('hidden');
+                dom.playerInlineStats.classList.remove('hidden');
+                dom.stdStatsBlock.classList.add('hidden');
+                dom.rightStrategyLabel.innerText = 'Right Farm Strategy:';
+                dom.chartSection.classList.add('chart-section--dual');
+                if (dom.enemyStrategy.value === 'threshold') dom.enemyThresholdGroup.classList.remove('hidden');
+            } else {
+                dom.enemySection.classList.add('hidden');
+                dom.playerFarmTitle.classList.add('hidden');
+                dom.leftStrategyLabel.classList.add('hidden');
+                dom.enemyStrategy.classList.add('hidden');
+                dom.enemyThresholdGroup.classList.add('hidden');
+                dom.playerInlineStats.classList.add('hidden');
+                dom.stdStatsBlock.classList.remove('hidden');
+                dom.rightStrategyLabel.innerText = 'Farm Strategy:';
+                dom.chartSection.classList.remove('chart-section--dual');
+            }
+            // Sync canvas internal resolution to new CSS height before re-rendering
+            setTimeout(function () { resizeCanvas(); clearChart(state.isCompetitive); }, 0);
+            resetSimulation();
+        });
+
+        dom.playerThreshold.addEventListener('input', function (e) { dom.playerThresholdLabel.innerText = e.target.value; });
+        dom.enemyThreshold.addEventListener('input', function (e) { dom.enemyThresholdLabel.innerText = e.target.value; });
+
+        dom.speedSlider.addEventListener('input', function (e) {
+            state.currentSpeed = parseInt(e.target.value);
+            if (state.currentSpeed < 30) dom.speedLabel.innerText = 'Slow';
+            else if (state.currentSpeed < 70) dom.speedLabel.innerText = 'Medium';
+            else dom.speedLabel.innerText = 'Fast';
+            setSimulationSpeed();
+        });
+
+        dom.btnHarvest.classList.toggle('hidden', dom.strategySelect.value !== 'manual');
+        dom.playerThresholdGroup.classList.toggle('hidden', dom.strategySelect.value !== 'threshold');
+        if (dom.enemyStrategy.value === 'threshold' && dom.competeToggle.checked) dom.enemyThresholdGroup.classList.remove('hidden');
+
+        window.addEventListener('resize', function () {
+            resizeCanvas();
+            renderChart(state.playerHistory, state.enemyHistory, state.isCompetitive);
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+})();

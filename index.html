@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Optimal Stopping Farm Simulation</title>
+    <meta name="description"
+        content="An interactive exploration of Optimal Stopping Theory using a Minecraft-style crop farm simulation. Compare harvest strategies in real time.">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,58 +20,46 @@
 
         <main class="dashboard">
 
-            <section class="farm-section enemy-section" id="enemy-section" style="display: none;">
+            <!-- Enemy / Left Farm (hidden by default) -->
+            <section class="farm-section enemy-section hidden" id="enemy-section">
                 <h2 class="farm-title" id="enemy-farm-title">Farm 1 (Left)</h2>
-                <div class="farm-content" style="display: flex; gap: 20px; align-items: flex-start;">
+                <div class="farm-content">
                     <div id="enemy-farm-grid" class="farm-grid"></div>
-                    <div class="stat-section comp-inline-stats" style="margin-bottom: 0; min-width: 150px;">
-                        <div class="stat-box"
-                            style="flex-direction: column; align-items: center; justify-content: center; margin-bottom: 10px;">
-                            <span class="stat-label" style="margin-bottom: 5px;">Total Yield</span>
-                            <span id="stat-yield-enemy" class="stat-value"
-                                style="font-size: 1.4rem; color: white;">0</span>
+                    <div class="stat-section comp-inline-stats">
+                        <div class="stat-box stat-column">
+                            <span class="stat-label stat-label--inline">Total Yield</span>
+                            <span id="stat-yield-enemy" class="stat-value stat-value--large">0</span>
                         </div>
-                        <div class="stat-box highlight"
-                            style="flex-direction: column; align-items: center; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 10px;">
-                            <span class="stat-label"
-                                style="font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 5px;">Yield
-                                / Time</span>
+                        <div class="stat-box stat-column highlight stat-divider-top">
+                            <span class="stat-label stat-label--subtle">Yield / Time</span>
                             <span id="stat-yield-time-enemy" class="stat-value">0.0000</span>
                         </div>
                     </div>
                 </div>
             </section>
 
-
+            <!-- Player / Right Farm -->
             <section class="farm-section player-section">
-                <h2 class="farm-title" id="player-farm-title" style="display: none;">Farm 2 (Right)</h2>
-                <div class="farm-content" style="display: flex; gap: 20px; align-items: flex-start;">
-                    <div style="display: flex; flex-direction: column;">
+                <h2 class="farm-title hidden" id="player-farm-title">Farm 2 (Right)</h2>
+                <div class="farm-content">
+                    <div class="farm-column">
                         <div id="farm-grid" class="farm-grid"></div>
-                        <button id="btn-harvest" class="btn harvest-btn"
-                            style="display: none; margin-top: 20px; width: 100%; max-width: 450px; font-size: 2rem; padding: 15px;">Harvest
-                            Now</button>
+                        <button id="btn-harvest" class="btn harvest-btn harvest-btn--full hidden">Harvest Now</button>
                     </div>
-                    <div class="stat-section comp-inline-stats" id="player-inline-stats"
-                        style="display: none; margin-bottom: 0; min-width: 150px;">
-                        <div class="stat-box"
-                            style="flex-direction: column; align-items: center; justify-content: center; margin-bottom: 10px;">
-                            <span class="stat-label" style="margin-bottom: 5px;">Total Yield</span>
-                            <span id="stat-yield-player" class="stat-value"
-                                style="font-size: 1.4rem; color: white;">0</span>
+                    <div class="stat-section comp-inline-stats hidden" id="player-inline-stats">
+                        <div class="stat-box stat-column">
+                            <span class="stat-label stat-label--inline">Total Yield</span>
+                            <span id="stat-yield-player" class="stat-value stat-value--large">0</span>
                         </div>
-                        <div class="stat-box highlight"
-                            style="flex-direction: column; align-items: center; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 15px; margin-top: 10px;">
-                            <span class="stat-label"
-                                style="font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 5px;">Yield
-                                / Time</span>
+                        <div class="stat-box stat-column highlight stat-divider-top">
+                            <span class="stat-label stat-label--subtle">Yield / Time</span>
                             <span id="stat-yield-time-player" class="stat-value">0.0000</span>
                         </div>
                     </div>
                 </div>
             </section>
 
-
+            <!-- Controls & Stats Panel -->
             <section class="control-section">
 
                 <div class="panel stats-panel" id="standard-stats">
@@ -88,7 +78,6 @@
                     </div>
                 </div>
 
-
                 <div class="panel controls-panel">
                     <h2>Simulation Controls</h2>
 
@@ -103,7 +92,7 @@
                         </select>
                     </div>
 
-                    <div class="control-group" id="player-threshold-group" style="display: none;">
+                    <div class="control-group hidden" id="player-threshold-group">
                         <label for="player-threshold">Harvest at: <span id="player-threshold-label">100</span>%</label>
                         <input type="range" id="player-threshold" min="1" max="100" value="100">
                     </div>
@@ -112,15 +101,15 @@
                         <label>
                             <input type="checkbox" id="compete-toggle"> Enable Dual Farm Display
                         </label>
-                        <label id="left-strategy-label" for="enemy-strategy"
-                            style="display: none; margin-top: 15px;">Left Farm Strategy:</label>
-                        <select id="enemy-strategy" style="display: none;">
+                        <label id="left-strategy-label" for="enemy-strategy" class="hidden label--spaced">Left Farm
+                            Strategy:</label>
+                        <select id="enemy-strategy" class="hidden">
                             <option value="threshold">Threshold</option>
                             <option value="naive_heuristic">Crude Expected Value</option>
                             <option value="true_expected_value">Markov Expected Value</option>
                             <option value="diminishing_returns">Diminishing Returns</option>
                         </select>
-                        <div id="enemy-threshold-group" style="display: none; margin-top: 10px;">
+                        <div id="enemy-threshold-group" class="hidden threshold-sub-group">
                             <label for="enemy-threshold">Harvest at: <span
                                     id="enemy-threshold-label">100</span>%</label>
                             <input type="range" id="enemy-threshold" min="1" max="100" value="100">
@@ -139,6 +128,15 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Performance Chart -->
+            <section class="chart-section" id="chart-section">
+                <div class="panel chart-panel">
+                    <h2>Performance History</h2>
+                    <canvas id="chart-canvas"></canvas>
+                </div>
+            </section>
+
         </main>
     </div>
     <script src="script.js"></script>
