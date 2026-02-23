@@ -5,19 +5,15 @@
     // SEEDED PRNG (mulberry32)
     // ═══════════════════════════════════════════════════════════════
 
-    function mulberry32(seed) {
-        var t = (seed + 0x6D2B79F5) | 0;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    }
-
     function createSeededRng(seed) {
-        var s = seed | 0;
+        // Spread seeds apart so consecutive harvest numbers
+        // produce genuinely different sequences
+        var s = Math.imul(seed, 0x9E3779B9) | 0;
         return function () {
-            var result = mulberry32(s);
-            s = (s + 1) | 0;
-            return result;
+            s = (s + 0x6D2B79F5) | 0;
+            var t = Math.imul(s ^ (s >>> 15), s | 1);
+            t = (t + Math.imul(t ^ (t >>> 7), t | 61)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
     }
 
