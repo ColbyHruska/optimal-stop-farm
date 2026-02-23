@@ -6,8 +6,6 @@
     // ═══════════════════════════════════════════════════════════════
 
     function createSeededRng(seed) {
-        // Spread seeds apart so consecutive harvest numbers
-        // produce genuinely different sequences
         var s = Math.imul(seed, 0x9E3779B9) | 0;
         return function () {
             s = (s + 0x6D2B79F5) | 0;
@@ -18,66 +16,71 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // STATE
+    // CONSTANTS & STATE
     // ═══════════════════════════════════════════════════════════════
 
-    const GRID_SIZE = 9;
-    const MAX_AGE = 7;
-    const WATER_SPEED_MS = 100;
-    const WATER_CLEAR_MS = 300;
+    var GRID_SIZE = 9;
+    var MAX_AGE = 7;
+    var WATER_SPEED_MS = 100;
+    var WATER_CLEAR_MS = 300;
+    var MAX_FARMS = 8;
 
-    const state = {
-        grid: [],
-        enemyGrid: [],
-        totalYield: 0,
+    var FARM_COLORS = [
+        '#4CAF50', '#ff9800', '#2196F3', '#e91e63',
+        '#9c27b0', '#00bcd4', '#ff5722', '#607d8b'
+    ];
+
+    var STRATEGY_OPTIONS = [
+        { value: 'threshold', label: 'Threshold' },
+        { value: 'naive_heuristic', label: 'Crude Expected Value' },
+        { value: 'smart_heuristic', label: 'Smarter Expected Value' },
+        { value: 'fixed_time_lookahead', label: 'Fixed-Time Lookahead' },
+    ];
+
+    var state = {
+        farms: [],
         totalTicks: 0,
-        enemyYield: 0,
         isPlaying: false,
         simulationInterval: null,
         currentSpeed: 50,
-        isHarvesting: false,
-        enemyIsHarvesting: false,
-        isCompetitive: false,
-        playerHistory: [],
-        enemyHistory: [],
-        playerHarvestCount: 0,
-        enemyHarvestCount: 0,
-        playerRng: null,
-        enemyRng: null,
+        nextFarmId: 0,
     };
 
-    function resetState() {
-        state.totalYield = 0;
-        state.totalTicks = 0;
-        state.enemyYield = 0;
-        state.isHarvesting = false;
-        state.enemyIsHarvesting = false;
-        state.playerHistory = [];
-        state.enemyHistory = [];
-        state.playerHarvestCount = 0;
-        state.enemyHarvestCount = 0;
-        state.playerRng = createSeededRng(0);
-        state.enemyRng = createSeededRng(0);
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
-                state.grid[r][c] = 0;
-                state.enemyGrid[r][c] = 0;
-            }
+    // ═══════════════════════════════════════════════════════════════
+    // FARM OBJECT
+    // ═══════════════════════════════════════════════════════════════
+
+    function createFarmData(id) {
+        var grid = [];
+        for (var r = 0; r < GRID_SIZE; r++) {
+            var row = [];
+            for (var c = 0; c < GRID_SIZE; c++) row.push(0);
+            grid.push(row);
         }
+        return {
+            id: id,
+            grid: grid,
+            totalYield: 0,
+            harvestCount: 0,
+            isHarvesting: false,
+            rng: createSeededRng(0),
+            history: [],
+            strategy: id === 0 ? 'manual' : 'threshold',
+            thresholdPct: 100,
+            dom: {},
+        };
     }
 
-    function initGridArrays() {
-        state.grid = [];
-        state.enemyGrid = [];
-        for (let r = 0; r < GRID_SIZE; r++) {
-            const row = [];
-            const enemyRow = [];
-            for (let c = 0; c < GRID_SIZE; c++) {
-                row.push(0);
-                enemyRow.push(0);
+    function resetFarmData(farm) {
+        farm.totalYield = 0;
+        farm.harvestCount = 0;
+        farm.isHarvesting = false;
+        farm.rng = createSeededRng(0);
+        farm.history = [];
+        for (var r = 0; r < GRID_SIZE; r++) {
+            for (var c = 0; c < GRID_SIZE; c++) {
+                farm.grid[r][c] = 0;
             }
-            state.grid.push(row);
-            state.enemyGrid.push(enemyRow);
         }
     }
 
@@ -86,91 +89,87 @@
     // ═══════════════════════════════════════════════════════════════
 
     function countFullyGrown(grid) {
-        let grown = 0;
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
+        var grown = 0;
+        for (var r = 0; r < GRID_SIZE; r++) {
+            for (var c = 0; c < GRID_SIZE; c++) {
                 if (grid[r][c] === MAX_AGE) grown++;
             }
         }
         return grown;
     }
 
-    const STRATEGIES = {
-        manual() {
+    var STRATEGIES = {
+        manual: function () {
             return false;
         },
 
-        threshold(grid, config) {
-            const totalCrops = GRID_SIZE * GRID_SIZE;
-            const grownCount = countFullyGrown(grid);
-            const requiredCrops = Math.ceil((totalCrops * config.thresholdPct) / 100);
+        threshold: function (grid, config) {
+            var totalCrops = GRID_SIZE * GRID_SIZE;
+            var grownCount = countFullyGrown(grid);
+            var requiredCrops = Math.ceil((totalCrops * config.thresholdPct) / 100);
             return grownCount >= requiredCrops;
         },
 
-        naive_heuristic(grid) {
-            const totalCrops = GRID_SIZE * GRID_SIZE;
-            const grownCount = countFullyGrown(grid);
-            const remaining = totalCrops - grownCount;
+        naive_heuristic: function (grid) {
+            var totalCrops = GRID_SIZE * GRID_SIZE;
+            var grownCount = countFullyGrown(grid);
+            var remaining = totalCrops - grownCount;
             if (remaining === 0) return true;
-            const expectedTicksForNextGrowth = totalCrops / remaining;
+            var expectedTicksForNextGrowth = totalCrops / remaining;
             return expectedTicksForNextGrowth > MAX_AGE;
         },
 
-        smart_heuristic(grid) {
-            const totalCrops = GRID_SIZE * GRID_SIZE;
-            const grownCount = countFullyGrown(grid);
+        smart_heuristic: function (grid) {
+            var totalCrops = GRID_SIZE * GRID_SIZE;
+            var grownCount = countFullyGrown(grid);
             if (grownCount === 0) return false;
             if (grownCount === totalCrops) return true;
 
-            const ageCounts = new Array(MAX_AGE + 1).fill(0);
-            for (let r = 0; r < GRID_SIZE; r++) {
-                for (let c = 0; c < GRID_SIZE; c++) {
+            var ageCounts = new Array(MAX_AGE + 1).fill(0);
+            for (var r = 0; r < GRID_SIZE; r++) {
+                for (var c = 0; c < GRID_SIZE; c++) {
                     ageCounts[grid[r][c]]++;
                 }
             }
 
-            let remainingHits = 0;
-            for (let age = 0; age < MAX_AGE; age++) {
+            var remainingHits = 0;
+            for (var age = 0; age < MAX_AGE; age++) {
                 remainingHits += ageCounts[age] * (MAX_AGE - age);
             }
 
-            const remaining = totalCrops - grownCount;
-            const avgCostPerHit = totalCrops / remaining;
-            const expectedTicks = remainingHits * avgCostPerHit;
-            const marginalCostPerCrop = expectedTicks / remaining;
+            var remaining = totalCrops - grownCount;
+            var avgCostPerHit = totalCrops / remaining;
+            var expectedTicks = remainingHits * avgCostPerHit;
+            var marginalCostPerCrop = expectedTicks / remaining;
 
             return marginalCostPerCrop > MAX_AGE;
         },
 
-        fixed_time_lookahead(grid) {
-            const totalCrops = GRID_SIZE * GRID_SIZE;
-            const N = totalCrops;
-            const M = MAX_AGE;
+        fixed_time_lookahead: function (grid) {
+            var totalCrops = GRID_SIZE * GRID_SIZE;
+            var N = totalCrops;
+            var M = MAX_AGE;
 
             if (!STRATEGIES.dpCache) {
-                const MAX_K = 2000;
-                // P[k][h] = prob of exactly h hits in k ticks
-                const P = [];
-                for (let k = 0; k <= MAX_K; k++) {
+                var MAX_K = 2000;
+                var P = [];
+                for (var k = 0; k <= MAX_K; k++) {
                     P.push(new Float64Array(M + 1));
                 }
                 P[0][0] = 1.0;
-                for (let k = 1; k <= MAX_K; k++) {
+                for (var k = 1; k <= MAX_K; k++) {
                     P[k][0] = P[k - 1][0] * (1 - 1 / N);
-                    for (let h = 1; h < M; h++) {
+                    for (var h = 1; h < M; h++) {
                         P[k][h] = P[k - 1][h] * (1 - 1 / N) + P[k - 1][h - 1] * (1 / N);
                     }
-                    // For M, it's >= M hits
                     P[k][M] = P[k - 1][M] + P[k - 1][M - 1] * (1 / N);
                 }
 
-                let maxRate = 0;
-                for (let k = 1; k <= MAX_K; k++) {
-                    let expectedYield = N * P[k][M];
-                    let rate = expectedYield / k;
-                    if (rate > maxRate) {
-                        maxRate = rate;
-                    }
+                var maxRate = 0;
+                for (var k = 1; k <= MAX_K; k++) {
+                    var expectedYield = N * P[k][M];
+                    var rate = expectedYield / k;
+                    if (rate > maxRate) maxRate = rate;
                 }
 
                 STRATEGIES.dpCache = P;
@@ -178,39 +177,35 @@
                 STRATEGIES.MAX_K = MAX_K;
             }
 
-            let currentYield = countFullyGrown(grid);
+            var currentYield = countFullyGrown(grid);
             if (currentYield === N) return true;
             if (currentYield === 0) return false;
 
-            const ageCounts = new Array(M + 1).fill(0);
-            for (let r = 0; r < GRID_SIZE; r++) {
-                for (let c = 0; c < GRID_SIZE; c++) {
+            var ageCounts = new Array(M + 1).fill(0);
+            for (var r = 0; r < GRID_SIZE; r++) {
+                for (var c = 0; c < GRID_SIZE; c++) {
                     ageCounts[grid[r][c]]++;
                 }
             }
 
-            let maxExpectedSurplus = 0;
-            for (let k = 1; k <= STRATEGIES.MAX_K; k++) {
-                let expectedYield = 0;
-                for (let age = 0; age <= M; age++) {
+            var maxExpectedSurplus = 0;
+            for (var k = 1; k <= STRATEGIES.MAX_K; k++) {
+                var expectedYield = 0;
+                for (var age = 0; age <= M; age++) {
                     if (ageCounts[age] === 0) continue;
-                    let rem = M - age;
+                    var rem = M - age;
                     if (rem === 0) {
                         expectedYield += ageCounts[age];
                         continue;
                     }
-
-                    let probReachingM = 0;
-                    for (let h = rem; h <= M; h++) {
+                    var probReachingM = 0;
+                    for (var h = rem; h <= M; h++) {
                         probReachingM += STRATEGIES.dpCache[k][h];
                     }
                     expectedYield += ageCounts[age] * probReachingM;
                 }
-
-                let surplus = expectedYield - STRATEGIES.lambdaStar * k;
-                if (surplus > maxExpectedSurplus) {
-                    maxExpectedSurplus = surplus;
-                }
+                var surplus = expectedYield - STRATEGIES.lambdaStar * k;
+                if (surplus > maxExpectedSurplus) maxExpectedSurplus = surplus;
             }
 
             return currentYield >= maxExpectedSurplus;
@@ -218,39 +213,14 @@
     };
 
     function evaluateStrategy(grid, strategyName, config) {
-        const fn = STRATEGIES[strategyName];
+        var fn = STRATEGIES[strategyName];
         if (!fn) return false;
         return fn(grid, config);
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // GRID
+    // GRID VISUALS
     // ═══════════════════════════════════════════════════════════════
-
-    function createGrid(gridContainer, enemyGridContainer) {
-        gridContainer.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
-        gridContainer.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
-        gridContainer.innerHTML = '';
-        enemyGridContainer.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
-        enemyGridContainer.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
-        enemyGridContainer.innerHTML = '';
-
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
-                var cell = document.createElement('div');
-                cell.classList.add('crop-cell');
-                cell.id = 'cell-' + r + '-' + c;
-                gridContainer.appendChild(cell);
-
-                var enemyCell = document.createElement('div');
-                enemyCell.classList.add('crop-cell');
-                enemyCell.id = 'enemy-cell-' + r + '-' + c;
-                enemyGridContainer.appendChild(enemyCell);
-            }
-        }
-    }
-
-    var STAGE_CLASSES = ['stage-0', 'stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5', 'stage-6', 'stage-7', 'water'];
 
     function setCellClass(cell, cls) {
         if (cell.dataset.stage === cls) return;
@@ -260,89 +230,84 @@
         cell.dataset.stage = cls;
     }
 
-    function updateCellVisual(r, c, isEnemy) {
-        var age = isEnemy ? state.enemyGrid[r][c] : state.grid[r][c];
-        var cellId = isEnemy ? ('enemy-cell-' + r + '-' + c) : ('cell-' + r + '-' + c);
-        var cell = document.getElementById(cellId);
+    function updateCellVisual(farm, r, c) {
+        var age = farm.grid[r][c];
+        var cell = farm.dom.cells[r * GRID_SIZE + c];
         if (cell) setCellClass(cell, 'stage-' + age);
     }
 
-    function resetAllVisuals() {
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
-                updateCellVisual(r, c, false);
-                updateCellVisual(r, c, true);
+    function resetFarmVisuals(farm) {
+        for (var r = 0; r < GRID_SIZE; r++) {
+            for (var c = 0; c < GRID_SIZE; c++) {
+                updateCellVisual(farm, r, c);
             }
         }
     }
 
-    function stepGrowth(isEnemy) {
-        var targetGrid = isEnemy ? state.enemyGrid : state.grid;
-        var rng = isEnemy ? state.enemyRng : state.playerRng;
-        var r = Math.floor(rng() * GRID_SIZE);
-        var c = Math.floor(rng() * GRID_SIZE);
-        if (targetGrid[r][c] < MAX_AGE) {
-            targetGrid[r][c]++;
-            var visualFrozen = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
-            if (!visualFrozen) {
-                updateCellVisual(r, c, isEnemy);
+    function buildGridCells(farm) {
+        var gridEl = farm.dom.gridEl;
+        gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 1fr)';
+        gridEl.style.gridTemplateRows = 'repeat(' + GRID_SIZE + ', 1fr)';
+        gridEl.innerHTML = '';
+        farm.dom.cells = [];
+        for (var r = 0; r < GRID_SIZE; r++) {
+            for (var c = 0; c < GRID_SIZE; c++) {
+                var cell = document.createElement('div');
+                cell.classList.add('crop-cell');
+                gridEl.appendChild(cell);
+                farm.dom.cells.push(cell);
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GROWTH & HARVEST
+    // ═══════════════════════════════════════════════════════════════
+
+    function stepGrowth(farm) {
+        var r = Math.floor(farm.rng() * GRID_SIZE);
+        var c = Math.floor(farm.rng() * GRID_SIZE);
+        if (farm.grid[r][c] < MAX_AGE) {
+            farm.grid[r][c]++;
+            if (!farm.isHarvesting) {
+                updateCellVisual(farm, r, c);
             }
             return true;
         }
         return false;
     }
 
-    function doHarvest(isEnemy) {
-        var targetGrid = isEnemy ? state.enemyGrid : state.grid;
-        if (isEnemy && state.enemyIsHarvesting) return;
-        if (!isEnemy && state.isHarvesting) return;
+    function doHarvest(farm) {
+        if (farm.isHarvesting) return;
 
-        var grownCount = countFullyGrown(targetGrid);
+        var grownCount = countFullyGrown(farm.grid);
+        farm.totalYield += grownCount;
+        farm.isHarvesting = true;
+        farm.harvestCount++;
+        farm.rng = createSeededRng(farm.harvestCount);
 
-        if (isEnemy) {
-            state.enemyYield += grownCount;
-            state.enemyIsHarvesting = true;
-            state.enemyHarvestCount++;
-            state.enemyRng = createSeededRng(state.enemyHarvestCount);
-        } else {
-            state.totalYield += grownCount;
-            state.isHarvesting = true;
-            state.playerHarvestCount++;
-            state.playerRng = createSeededRng(state.playerHarvestCount);
-        }
-
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
-                targetGrid[r][c] = 0;
+        for (var r = 0; r < GRID_SIZE; r++) {
+            for (var c = 0; c < GRID_SIZE; c++) {
+                farm.grid[r][c] = 0;
             }
         }
 
-        // Purely cosmetic water animation
+        // Water animation
         var row = 0;
         function animateWaterRow() {
-            var isStillHarvesting = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
-            if (!isStillHarvesting) return;
-
+            if (!farm.isHarvesting) return;
             if (row < GRID_SIZE) {
-                for (let c = 0; c < GRID_SIZE; c++) {
-                    var cellId = isEnemy ? ('enemy-cell-' + row + '-' + c) : ('cell-' + row + '-' + c);
-                    var cell = document.getElementById(cellId);
+                for (var c = 0; c < GRID_SIZE; c++) {
+                    var cell = farm.dom.cells[row * GRID_SIZE + c];
                     if (cell) setCellClass(cell, 'water');
                 }
                 row++;
                 setTimeout(animateWaterRow, WATER_SPEED_MS);
             } else {
                 setTimeout(function () {
-                    var stillHarvesting = isEnemy ? state.enemyIsHarvesting : state.isHarvesting;
-                    if (!stillHarvesting) return;
-                    // Re-sync visuals to actual grid state (may have grown during animation)
-                    for (let r = 0; r < GRID_SIZE; r++) {
-                        for (let c = 0; c < GRID_SIZE; c++) {
-                            updateCellVisual(r, c, isEnemy);
-                        }
-                    }
-                    if (isEnemy) state.enemyIsHarvesting = false;
-                    else state.isHarvesting = false;
+                    if (!farm.isHarvesting) return;
+                    resetFarmVisuals(farm);
+                    farm.isHarvesting = false;
                 }, WATER_CLEAR_MS);
             }
         }
@@ -354,8 +319,6 @@
     // ═══════════════════════════════════════════════════════════════
 
     var CHART_PADDING = { top: 30, right: 20, bottom: 40, left: 55 };
-    var PLAYER_COLOR = '#4CAF50';
-    var ENEMY_COLOR = '#ff9800';
     var GRID_COLOR = 'rgba(255, 255, 255, 0.07)';
     var AXIS_COLOR = 'rgba(255, 255, 255, 0.3)';
     var LABEL_COLOR = 'rgba(255, 255, 255, 0.6)';
@@ -385,12 +348,12 @@
         chartCtx.scale(dpr, dpr);
     }
 
-    function scheduleRender(playerData, enemyData, showEnemy) {
+    function scheduleChartRender() {
         if (renderScheduled) return;
         renderScheduled = true;
         requestAnimationFrame(function () {
             renderScheduled = false;
-            renderChart(playerData, enemyData, showEnemy);
+            renderChart();
         });
     }
 
@@ -405,7 +368,7 @@
         return result;
     }
 
-    function renderChart(playerData, enemyData, showEnemy) {
+    function renderChart() {
         if (!chartCtx || !chartCanvas) return;
         var displayWidth = chartDisplayWidth;
         var displayHeight = chartDisplayHeight;
@@ -415,7 +378,12 @@
         var chartHeight = displayHeight - CHART_PADDING.top - CHART_PADDING.bottom;
         if (chartWidth <= 0 || chartHeight <= 0) return;
 
-        var allData = showEnemy ? playerData.concat(enemyData) : playerData.slice();
+        // Gather all data points
+        var allData = [];
+        for (var f = 0; f < state.farms.length; f++) {
+            allData = allData.concat(state.farms[f].history);
+        }
+
         if (allData.length === 0) {
             chartCtx.fillStyle = LABEL_COLOR;
             chartCtx.font = '16px "VT323", monospace';
@@ -434,10 +402,15 @@
         drawGridLines(chartWidth, chartHeight, maxTick, yMax);
         drawAxes(chartWidth, chartHeight, maxTick, yMax);
 
-        if (playerData.length > 0) drawLine(downsample(playerData, MAX_RENDER_POINTS), chartWidth, chartHeight, maxTick, yMax, PLAYER_COLOR);
-        if (showEnemy && enemyData.length > 0) drawLine(downsample(enemyData, MAX_RENDER_POINTS), chartWidth, chartHeight, maxTick, yMax, ENEMY_COLOR);
+        for (var f = 0; f < state.farms.length; f++) {
+            var farm = state.farms[f];
+            if (farm.history.length > 0) {
+                var color = FARM_COLORS[farm.id % FARM_COLORS.length];
+                drawLine(downsample(farm.history, MAX_RENDER_POINTS), chartWidth, chartHeight, maxTick, yMax, color);
+            }
+        }
 
-        if (showEnemy) drawLegend(displayWidth);
+        if (state.farms.length > 1) drawLegend(displayWidth);
 
         chartCtx.fillStyle = TITLE_COLOR;
         chartCtx.font = '14px "VT323", monospace';
@@ -510,21 +483,196 @@
     }
 
     function drawLegend(displayWidth) {
-        var legendY = CHART_PADDING.top + 4;
         chartCtx.font = '13px "VT323", monospace';
-        chartCtx.fillStyle = PLAYER_COLOR;
-        chartCtx.fillRect(displayWidth - 170, legendY - 6, 10, 10);
-        chartCtx.fillStyle = LABEL_COLOR;
-        chartCtx.textAlign = 'left';
-        chartCtx.fillText('Right Farm', displayWidth - 156, legendY + 3);
-        chartCtx.fillStyle = ENEMY_COLOR;
-        chartCtx.fillRect(displayWidth - 86, legendY - 6, 10, 10);
-        chartCtx.fillStyle = LABEL_COLOR;
-        chartCtx.fillText('Left Farm', displayWidth - 72, legendY + 3);
+        var legendY = CHART_PADDING.top + 4;
+        var xPos = displayWidth - 20;
+
+        for (var i = state.farms.length - 1; i >= 0; i--) {
+            var farm = state.farms[i];
+            var color = FARM_COLORS[farm.id % FARM_COLORS.length];
+            var label = 'Farm ' + (farm.id + 1);
+            var textWidth = chartCtx.measureText(label).width;
+
+            xPos -= textWidth;
+            chartCtx.fillStyle = LABEL_COLOR;
+            chartCtx.textAlign = 'left';
+            chartCtx.fillText(label, xPos, legendY + 3);
+
+            xPos -= 14;
+            chartCtx.fillStyle = color;
+            chartCtx.fillRect(xPos, legendY - 6, 10, 10);
+
+            xPos -= 12;
+        }
     }
 
-    function clearChart(showEnemy) {
-        renderChart([], [], showEnemy);
+    // ═══════════════════════════════════════════════════════════════
+    // DYNAMIC FARM DOM
+    // ═══════════════════════════════════════════════════════════════
+
+    function buildFarmCard(farm) {
+        var card = document.createElement('div');
+        card.className = 'farm-card';
+        card.dataset.farmId = farm.id;
+
+        // Title
+        var title = document.createElement('h2');
+        title.className = 'farm-title';
+        title.textContent = 'Farm ' + (farm.id + 1);
+        var color = FARM_COLORS[farm.id % FARM_COLORS.length];
+        title.style.color = color;
+        card.appendChild(title);
+
+        // Body (grid + stats sidebar)
+        var body = document.createElement('div');
+        body.className = 'farm-body';
+
+        // Grid column
+        var farmCol = document.createElement('div');
+        farmCol.className = 'farm-column';
+        var gridEl = document.createElement('div');
+        gridEl.className = 'farm-grid';
+        farmCol.appendChild(gridEl);
+
+        // Harvest button (only for first farm)
+        var harvestBtn = document.createElement('button');
+        harvestBtn.className = 'btn harvest-btn harvest-btn--farm';
+        harvestBtn.textContent = 'Harvest Now';
+        if (farm.id !== 0 || farm.strategy !== 'manual') {
+            harvestBtn.classList.add('hidden');
+        }
+        harvestBtn.addEventListener('click', function () {
+            if (!farm.isHarvesting) doHarvest(farm);
+        });
+        farmCol.appendChild(harvestBtn);
+
+        body.appendChild(farmCol);
+
+        // Stats sidebar
+        var stats = document.createElement('div');
+        stats.className = 'farm-stats';
+
+        // Strategy selector
+        var stratGroup = document.createElement('div');
+        stratGroup.className = 'farm-strategy-group';
+        var stratLabel = document.createElement('label');
+        stratLabel.textContent = 'Strategy';
+        stratGroup.appendChild(stratLabel);
+
+        var stratSelect = document.createElement('select');
+        // Only farm 0 gets manual option
+        if (farm.id === 0) {
+            var manualOpt = document.createElement('option');
+            manualOpt.value = 'manual';
+            manualOpt.textContent = 'Manual';
+            stratSelect.appendChild(manualOpt);
+        }
+        for (var i = 0; i < STRATEGY_OPTIONS.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = STRATEGY_OPTIONS[i].value;
+            opt.textContent = STRATEGY_OPTIONS[i].label;
+            stratSelect.appendChild(opt);
+        }
+        stratSelect.value = farm.strategy;
+        stratGroup.appendChild(stratSelect);
+
+        // Threshold sub-group
+        var threshGroup = document.createElement('div');
+        threshGroup.className = 'farm-threshold-group';
+        if (farm.strategy !== 'threshold') threshGroup.classList.add('hidden');
+        var threshLabel = document.createElement('label');
+        var threshLabelSpan = document.createElement('span');
+        threshLabelSpan.textContent = farm.thresholdPct;
+        threshLabel.textContent = 'Harvest at: ';
+        threshLabel.appendChild(threshLabelSpan);
+        threshLabel.appendChild(document.createTextNode('%'));
+        threshGroup.appendChild(threshLabel);
+
+        var threshSlider = document.createElement('input');
+        threshSlider.type = 'range';
+        threshSlider.min = '1';
+        threshSlider.max = '100';
+        threshSlider.value = farm.thresholdPct;
+        threshGroup.appendChild(threshSlider);
+
+        stratGroup.appendChild(threshGroup);
+        stats.appendChild(stratGroup);
+
+        // Yield stat
+        var yieldBox = document.createElement('div');
+        yieldBox.className = 'stat-box stat-column';
+        var yieldLabel = document.createElement('span');
+        yieldLabel.className = 'stat-label stat-label--inline';
+        yieldLabel.textContent = 'Total Yield';
+        var yieldVal = document.createElement('span');
+        yieldVal.className = 'stat-value stat-value--large';
+        yieldVal.textContent = '0';
+        yieldBox.appendChild(yieldLabel);
+        yieldBox.appendChild(yieldVal);
+        stats.appendChild(yieldBox);
+
+        // Harvests stat
+        var harvestBox = document.createElement('div');
+        harvestBox.className = 'stat-box stat-column stat-divider-top';
+        var harvestLabel = document.createElement('span');
+        harvestLabel.className = 'stat-label stat-label--subtle';
+        harvestLabel.textContent = 'Harvests';
+        var harvestVal = document.createElement('span');
+        harvestVal.className = 'stat-value';
+        harvestVal.textContent = '0';
+        harvestBox.appendChild(harvestLabel);
+        harvestBox.appendChild(harvestVal);
+        stats.appendChild(harvestBox);
+
+        // Yield/Time stat
+        var ytBox = document.createElement('div');
+        ytBox.className = 'stat-box stat-column highlight stat-divider-top';
+        var ytLabel = document.createElement('span');
+        ytLabel.className = 'stat-label stat-label--subtle';
+        ytLabel.textContent = 'Yield / Time';
+        var ytVal = document.createElement('span');
+        ytVal.className = 'stat-value';
+        ytVal.textContent = '0.0000';
+        ytBox.appendChild(ytLabel);
+        ytBox.appendChild(ytVal);
+        stats.appendChild(ytBox);
+
+        body.appendChild(stats);
+        card.appendChild(body);
+
+        // Store DOM refs
+        farm.dom = {
+            card: card,
+            gridEl: gridEl,
+            cells: [],
+            harvestBtn: harvestBtn,
+            stratSelect: stratSelect,
+            threshGroup: threshGroup,
+            threshSlider: threshSlider,
+            threshLabelSpan: threshLabelSpan,
+            yieldVal: yieldVal,
+            harvestVal: harvestVal,
+            ytVal: ytVal,
+        };
+
+        // Strategy change handler
+        stratSelect.addEventListener('change', function () {
+            farm.strategy = stratSelect.value;
+            farm.thresholdPct = parseInt(threshSlider.value);
+            threshGroup.classList.toggle('hidden', farm.strategy !== 'threshold');
+            // Only farm 0 can show harvest button
+            if (farm.id === 0) {
+                harvestBtn.classList.toggle('hidden', farm.strategy !== 'manual');
+            }
+        });
+
+        // Threshold slider handler
+        threshSlider.addEventListener('input', function () {
+            farm.thresholdPct = parseInt(threshSlider.value);
+            threshLabelSpan.textContent = threshSlider.value;
+        });
+
+        return card;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -535,110 +683,95 @@
 
     function init() {
         dom = {
-            gridContainer: document.getElementById('farm-grid'),
-            enemyGridContainer: document.getElementById('enemy-farm-grid'),
-            statYield: document.getElementById('stat-yield'),
+            farmsContainer: document.getElementById('farms-container'),
             statTicks: document.getElementById('stat-ticks'),
-            statYieldTime: document.getElementById('stat-yield-time'),
-            stdStatsBlock: document.getElementById('standard-stats'),
-            playerInlineStats: document.getElementById('player-inline-stats'),
-            statYieldTimePlayer: document.getElementById('stat-yield-time-player'),
-            statYieldTimeEnemy: document.getElementById('stat-yield-time-enemy'),
-            statYieldPlayer: document.getElementById('stat-yield-player'),
-            statYieldEnemy: document.getElementById('stat-yield-enemy'),
-            statHarvests: document.getElementById('stat-harvests'),
-            statHarvestsPlayer: document.getElementById('stat-harvests-player'),
-            statHarvestsEnemy: document.getElementById('stat-harvests-enemy'),
-            strategySelect: document.getElementById('strategy-select'),
-            competeToggle: document.getElementById('compete-toggle'),
-            enemyStrategy: document.getElementById('enemy-strategy'),
-            playerFarmTitle: document.getElementById('player-farm-title'),
-            enemySection: document.getElementById('enemy-section'),
             speedSlider: document.getElementById('speed-slider'),
             speedLabel: document.getElementById('speed-label'),
             btnPlayPause: document.getElementById('btn-play-pause'),
             btnStep: document.getElementById('btn-step'),
-            btnHarvest: document.getElementById('btn-harvest'),
             btnReset: document.getElementById('btn-reset'),
-            rightStrategyLabel: document.getElementById('right-strategy-label'),
-            leftStrategyLabel: document.getElementById('left-strategy-label'),
-            playerThresholdGroup: document.getElementById('player-threshold-group'),
-            playerThreshold: document.getElementById('player-threshold'),
-            playerThresholdLabel: document.getElementById('player-threshold-label'),
-            enemyThresholdGroup: document.getElementById('enemy-threshold-group'),
-            enemyThreshold: document.getElementById('enemy-threshold'),
-            enemyThresholdLabel: document.getElementById('enemy-threshold-label'),
+            btnAddFarm: document.getElementById('btn-add-farm'),
+            btnRemoveFarm: document.getElementById('btn-remove-farm'),
+            farmCountLabel: document.getElementById('farm-count-label'),
             chartCanvas: document.getElementById('chart-canvas'),
-            chartSection: document.getElementById('chart-section'),
         };
 
-        initGridArrays();
-        createGrid(dom.gridContainer, dom.enemyGridContainer);
         initChart(dom.chartCanvas);
-        resetSimulation();
+        addFarm(); // Start with 1 farm
         setupEventListeners();
         updateUI();
     }
 
+    function addFarm() {
+        if (state.farms.length >= MAX_FARMS) return;
+
+        var farm = createFarmData(state.nextFarmId++);
+        state.farms.push(farm);
+
+        var card = buildFarmCard(farm);
+        dom.farmsContainer.appendChild(card);
+        buildGridCells(farm);
+        resetFarmVisuals(farm);
+
+        dom.farmCountLabel.textContent = state.farms.length;
+        dom.btnRemoveFarm.disabled = state.farms.length <= 1;
+        dom.btnAddFarm.disabled = state.farms.length >= MAX_FARMS;
+    }
+
+    function removeFarm() {
+        if (state.farms.length <= 1) return;
+
+        var farm = state.farms.pop();
+        farm.dom.card.remove();
+
+        dom.farmCountLabel.textContent = state.farms.length;
+        dom.btnRemoveFarm.disabled = state.farms.length <= 1;
+        dom.btnAddFarm.disabled = state.farms.length >= MAX_FARMS;
+    }
+
     function resetSimulation() {
         pauseSimulation();
-        resetState();
-        resetAllVisuals();
+        state.totalTicks = 0;
+        for (var i = 0; i < state.farms.length; i++) {
+            resetFarmData(state.farms[i]);
+            resetFarmVisuals(state.farms[i]);
+        }
         updateUI();
-        clearChart(state.isCompetitive);
+        renderChart();
     }
 
     function updateUI() {
-        dom.statYield.textContent = state.totalYield.toLocaleString();
         dom.statTicks.textContent = state.totalTicks.toLocaleString();
-        var yieldPerTime = state.totalTicks > 0 ? (state.totalYield / state.totalTicks) : 0;
-        dom.statYieldTime.textContent = yieldPerTime.toFixed(4);
-        dom.statYieldPlayer.textContent = state.totalYield.toLocaleString();
-        dom.statYieldEnemy.textContent = state.enemyYield.toLocaleString();
-        dom.statYieldTimePlayer.textContent = yieldPerTime.toFixed(4);
-        var enemyYieldPerTime = state.totalTicks > 0 ? (state.enemyYield / state.totalTicks) : 0;
-        dom.statYieldTimeEnemy.textContent = enemyYieldPerTime.toFixed(4);
-        dom.statHarvests.textContent = state.playerHarvestCount;
-        dom.statHarvestsPlayer.textContent = state.playerHarvestCount;
-        dom.statHarvestsEnemy.textContent = state.enemyHarvestCount;
-    }
-
-    function getStrategyConfig(isEnemy) {
-        return {
-            thresholdPct: parseInt(isEnemy ? dom.enemyThreshold.value : dom.playerThreshold.value),
-        };
+        for (var i = 0; i < state.farms.length; i++) {
+            var farm = state.farms[i];
+            farm.dom.yieldVal.textContent = farm.totalYield.toLocaleString();
+            farm.dom.harvestVal.textContent = farm.harvestCount;
+            var yt = state.totalTicks > 0 ? (farm.totalYield / state.totalTicks) : 0;
+            farm.dom.ytVal.textContent = yt.toFixed(4);
+        }
     }
 
     function recordSnapshot() {
-        state.playerHistory.push({
-            tick: state.totalTicks,
-            total: state.totalYield + countFullyGrown(state.grid),
-        });
-        if (state.isCompetitive) {
-            state.enemyHistory.push({
+        for (var i = 0; i < state.farms.length; i++) {
+            var farm = state.farms[i];
+            farm.history.push({
                 tick: state.totalTicks,
-                total: state.enemyYield + countFullyGrown(state.enemyGrid),
+                total: farm.totalYield + countFullyGrown(farm.grid),
             });
         }
     }
 
     function stepSimulation() {
         state.totalTicks++;
-
-        stepGrowth(false);
-        if (!state.isHarvesting && evaluateStrategy(state.grid, dom.strategySelect.value, getStrategyConfig(false))) {
-            doHarvest(false);
-        }
-
-        if (state.isCompetitive) {
-            stepGrowth(true);
-            if (!state.enemyIsHarvesting && evaluateStrategy(state.enemyGrid, dom.enemyStrategy.value, getStrategyConfig(true))) {
-                doHarvest(true);
+        for (var i = 0; i < state.farms.length; i++) {
+            var farm = state.farms[i];
+            stepGrowth(farm);
+            if (!farm.isHarvesting && evaluateStrategy(farm.grid, farm.strategy, { thresholdPct: farm.thresholdPct })) {
+                doHarvest(farm);
             }
         }
-
         recordSnapshot();
-        scheduleRender(state.playerHistory, state.enemyHistory, state.isCompetitive);
+        scheduleChartRender();
         updateUI();
     }
 
@@ -675,48 +808,9 @@
     function setupEventListeners() {
         dom.btnPlayPause.addEventListener('click', togglePlayPause);
         dom.btnStep.addEventListener('click', function () { pauseSimulation(); stepSimulation(); });
-        dom.btnHarvest.addEventListener('click', function () { if (!state.isHarvesting) doHarvest(false); });
         dom.btnReset.addEventListener('click', resetSimulation);
-
-        dom.strategySelect.addEventListener('change', function (e) {
-            dom.btnHarvest.classList.toggle('hidden', e.target.value !== 'manual');
-            dom.playerThresholdGroup.classList.toggle('hidden', e.target.value !== 'threshold');
-        });
-
-        dom.enemyStrategy.addEventListener('change', function (e) {
-            dom.enemyThresholdGroup.classList.toggle('hidden', e.target.value !== 'threshold');
-        });
-
-        dom.competeToggle.addEventListener('change', function (e) {
-            state.isCompetitive = e.target.checked;
-            if (state.isCompetitive) {
-                dom.enemySection.classList.remove('hidden');
-                dom.playerFarmTitle.classList.remove('hidden');
-                dom.leftStrategyLabel.classList.remove('hidden');
-                dom.enemyStrategy.classList.remove('hidden');
-                dom.playerInlineStats.classList.remove('hidden');
-                dom.stdStatsBlock.classList.add('hidden');
-                dom.rightStrategyLabel.innerText = 'Right Farm Strategy:';
-                dom.chartSection.classList.add('chart-section--dual');
-                if (dom.enemyStrategy.value === 'threshold') dom.enemyThresholdGroup.classList.remove('hidden');
-            } else {
-                dom.enemySection.classList.add('hidden');
-                dom.playerFarmTitle.classList.add('hidden');
-                dom.leftStrategyLabel.classList.add('hidden');
-                dom.enemyStrategy.classList.add('hidden');
-                dom.enemyThresholdGroup.classList.add('hidden');
-                dom.playerInlineStats.classList.add('hidden');
-                dom.stdStatsBlock.classList.remove('hidden');
-                dom.rightStrategyLabel.innerText = 'Farm Strategy:';
-                dom.chartSection.classList.remove('chart-section--dual');
-            }
-            // Sync canvas internal resolution to new CSS height before re-rendering
-            setTimeout(function () { resizeCanvas(); clearChart(state.isCompetitive); }, 0);
-            resetSimulation();
-        });
-
-        dom.playerThreshold.addEventListener('input', function (e) { dom.playerThresholdLabel.innerText = e.target.value; });
-        dom.enemyThreshold.addEventListener('input', function (e) { dom.enemyThresholdLabel.innerText = e.target.value; });
+        dom.btnAddFarm.addEventListener('click', function () { addFarm(); resetSimulation(); });
+        dom.btnRemoveFarm.addEventListener('click', function () { removeFarm(); resetSimulation(); });
 
         dom.speedSlider.addEventListener('input', function (e) {
             state.currentSpeed = parseInt(e.target.value);
@@ -726,13 +820,9 @@
             setSimulationSpeed();
         });
 
-        dom.btnHarvest.classList.toggle('hidden', dom.strategySelect.value !== 'manual');
-        dom.playerThresholdGroup.classList.toggle('hidden', dom.strategySelect.value !== 'threshold');
-        if (dom.enemyStrategy.value === 'threshold' && dom.competeToggle.checked) dom.enemyThresholdGroup.classList.remove('hidden');
-
         window.addEventListener('resize', function () {
             resizeCanvas();
-            renderChart(state.playerHistory, state.enemyHistory, state.isCompetitive);
+            renderChart();
         });
     }
 
